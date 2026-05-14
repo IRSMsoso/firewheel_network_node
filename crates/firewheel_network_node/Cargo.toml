@@ -1,0 +1,26 @@
+[package]
+name = "firewheel_network_node"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+# Enables `Component` derive macros
+bevy = ["dep:bevy_ecs", "firewheel-core/bevy"]
+# Enables `Reflect` derive macros
+bevy_reflect = ["dep:bevy_reflect", "firewheel-core/bevy_reflect"]
+# Enables serde derives for types
+serde = []
+# Enables the steam networking messages transport implementation
+steam_networking_messages = ["dep:steamworks"]
+
+[dependencies]
+firewheel-core = { git = "https://github.com/BillyDM/Firewheel", branch = "main" }
+bevy_ecs = { version = "0.18.1", optional = true, default-features = false }
+bevy_reflect = { version = "0.18.1", optional = true, default-features = false }
+serde = { version = "1", features = ["derive"] }
+steamworks = { version = "0.13.1", optional = true }
+opus = "0.3.1"
+# rtp = "0.17.1"
+bincode = { version = "2.0.1", features = ["serde"] }
+thiserror = "2.0.18"
+rtrb = "0.3.4"
