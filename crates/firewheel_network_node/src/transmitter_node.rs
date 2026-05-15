@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use crate::message::NetworkNodeMessage;
 use crate::network_io::SendMessage;
 use crate::transport::NetworkNodeTransport;
@@ -8,16 +9,17 @@ use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
-use opus::{Application, Channels, Encoder};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
+use opus_rs::{Application, OpusEncoder};
+use thiserror::Error;
 
 struct NetworkTransmitterNodeConfig<T>
 where
     T: NetworkNodeTransport,
 {
     /// The number of channels of input to pass to the Opus Encoder. Must match the receiver node
-    channels: Channels,
+    channels: usize,
     /// Type of application passed to the Opus Encoder. Must match the receiver node
     application: Application,
     /// The configuration for the transport used to send data
@@ -80,6 +82,15 @@ where
     }
 }
 
+#[derive(Debug, Copy, Clone, Error)]
+pub struct OpusError(&'static str);
+
+impl Display for OpusError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Opus Error: {}", self.0)
+    }
+}
+
 impl<T> AudioNode for NetworkTransmitterNode<T>
 where
     T: NetworkNodeTransport,
@@ -88,10 +99,7 @@ where
 
     fn info(&self, configuration: &Self::Configuration) -> Result<AudioNodeInfo, NodeError> {
         Ok(AudioNodeInfo::new().channel_config(ChannelConfig {
-            num_inputs: match configuration.channels {
-                Channels::Mono => ChannelCount::MONO,
-                Channels::Stereo => ChannelCount::STEREO,
-            },
+            num_inputs: configuration.channels.into(),
             num_outputs: ChannelCount::ZERO,
         }))
     }
@@ -103,14 +111,13 @@ where
     ) -> Result<impl AudioNodeProcessor, NodeError> {
         Ok(NetworkTransmitterNodeProcessor::<T> {
             transport: T::construct(&configuration.transport_config)?,
-            encoder: Encoder::new(
-                cx.stream_info.sample_rate.get(),
+            encoder: OpusEncoder::new(
+                cx.stream_info.sample_rate.get() as i32,
                 configuration.channels,
                 configuration.application,
-            )?,
+            ).map_err(|e| OpusError(e))?,
             channels: configuration.channels,
             address: self.address.clone(),
-            node_net_id: self.node_net_id,
         })
     }
 }
@@ -132,9 +139,9 @@ where
     /// The network transport to use to actually send the data
     transport: T,
     /// The opus encoder state
-    encoder: Encoder,
+    encoder: OpusEncoder,
     /// The number of opus channels to use, Mono or Stereo
-    channels: Channels,
+    channels: usize,
     /// The destination of the audio data
     address: Arc<Mutex<T::Addr>>,
 }
@@ -153,7 +160,7 @@ where
 
         let len = match buffers.inputs.len() {
             1 => {
-                let Ok(len) = self.encoder.encode_float(buffers.inputs[0], &mut encoded) else {
+                let Ok(len) = self.encoder.encode(buffers.inputs[0], info.frames, &mut encoded) else {
                     return ProcessStatus::Bypass;
                 };
 
@@ -175,8 +182,9 @@ where
                         buffers.inputs[1][sample_index];
                 }
 
-                let Ok(len) = self.encoder.encode_float(
+                let Ok(len) = self.encoder.encode(
                     &extra.scratch_buffers.first()[0..(num_samples * 2)],
+                    info.frames,
                     &mut encoded,
                 ) else {
                     return ProcessStatus::Bypass;
