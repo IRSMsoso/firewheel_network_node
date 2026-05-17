@@ -1,7 +1,7 @@
 use firewheel::cpal::CpalStream;
 use firewheel::nodes::sampler::{SamplerNode, SamplerState};
 use firewheel::FirewheelContext;
-use firewheel_network_node::transmitter_node::{
+use firewheel_network_node::nodes::transmitter_node::{
     NetworkTransmitterNode, NetworkTransmitterNodeConfig, OpusApplicationType,
 };
 use firewheel_network_node::transport::udp_socket_transport::{
@@ -37,7 +37,7 @@ fn main() {
         .unwrap();
 
     let transmitter_node: NetworkTransmitterNode<UdpSocketTransport> = NetworkTransmitterNode::new(
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 1, 1, 78)), 1680),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1680),
         0,
     );
 

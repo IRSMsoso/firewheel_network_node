@@ -3,8 +3,9 @@ use crate::constants::{
 };
 use crate::network_io::{
     network_thread, NetworkThreadControlMessage, NetworkThreadRegistryKey,
-    TransmitterNodeNetworkMessage, NETWORK_THREAD_REGISTRY,
+    TransmitterNodeNetworkThreadMessage, NETWORK_THREAD_REGISTRY,
 };
+pub use crate::nodes::shared::{OpusApplicationType, OpusError};
 use crate::transport::NetworkNodeTransport;
 use firewheel_core::channel_config::{ChannelConfig, ChannelCount};
 use firewheel_core::diff::{Diff, Patch};
@@ -13,16 +14,7 @@ use firewheel_core::node::{
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
 use opus_rs::{Application, OpusEncoder};
-use std::fmt::{Display, Formatter};
 use std::sync::mpsc;
-use thiserror::Error;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OpusApplicationType {
-    Voip,
-    Audio,
-    RestrictedLowDelay,
-}
 
 pub struct NetworkTransmitterNodeConfig<T>
 where
@@ -32,7 +24,7 @@ where
     pub channels: usize,
     /// Type of application passed to the Opus Encoder. Must match the receiver node
     pub opus_application_type: OpusApplicationType,
-    /// The configuration for the transport used to send data
+    /// The configuration for the transport used to send/receive data
     pub transport_config: T::Config,
 }
 
@@ -73,15 +65,6 @@ where
             address,
             node_net_id,
         }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Error)]
-pub struct OpusError(&'static str);
-
-impl Display for OpusError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Opus Error: {}", self.0)
     }
 }
 
@@ -176,7 +159,7 @@ where
     /// The number of opus channels to use, Mono or Stereo
     opus_channels: usize,
     /// The producer side of the network thread communication ringbuffer
-    producer: rtrb::Producer<TransmitterNodeNetworkMessage<T>>,
+    producer: rtrb::Producer<TransmitterNodeNetworkThreadMessage<T>>,
     /// Encoding buffer
     encoding_buffer: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
     /// Interleaving buffer.
@@ -242,15 +225,14 @@ where
                 len
             }
             _ => {
-                // Opus can only support mono or stereo
-                return ProcessStatus::Bypass;
+                unreachable!()
             }
         };
 
         // Push our encoded data to the networking thread via ringbuffer
         // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
         // TODO: Is this a valid strategy?
-        let _ = self.producer.push(TransmitterNodeNetworkMessage {
+        let _ = self.producer.push(TransmitterNodeNetworkThreadMessage {
             address: self.address.clone(),
             node_net_id: self.node_net_id,
             encoded_data: self.encoding_buffer,
