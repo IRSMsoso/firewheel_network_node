@@ -3,7 +3,7 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
 pub struct UdpSocketTransportConfig {
-    receive_port: u16,
+    pub receive_port: u16,
 }
 
 impl Default for UdpSocketTransportConfig {

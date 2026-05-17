@@ -103,10 +103,10 @@ fn main() {
         // Log any stream errors/warnings that have occurred.
         stream.log_status();
 
-        // The stream has stopped unexpectedly (i.e the user has
+        // The stream has stopped unexpectedly (i.e. the user has
         // unplugged their headphones.)
         //
-        // Typically you should start a new stream as soon as
+        // Typically, you should start a new stream as soon as
         // possible to resume processing (even if it's a dummy
         // output device).
         //

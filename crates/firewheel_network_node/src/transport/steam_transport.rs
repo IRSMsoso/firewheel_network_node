@@ -20,10 +20,10 @@ impl Display for SteamTransportConstructionError {
 }
 
 pub struct SteamNetworkingMessagesTransport {
-    // Handle for Steam Networking Messages
+    /// Handle for Steam Networking Messages
     networking_messages: NetworkingMessages,
 
-    // Steam Networking Messages channel to send audio data over. This channel should be unique for networking node data
+    /// Steam Networking Messages channel to send audio data over. This channel should be unique for networking node data
     channel: u32,
 }
 
@@ -47,24 +47,26 @@ impl Default for SteamNetworkingMessagesTransportConfig {
 impl NetworkNodeTransport for SteamNetworkingMessagesTransport {
     type Addr = SteamId;
     type Config = SteamNetworkingMessagesTransportConfig;
+    const NAME: &'static str = "Steam Networking Transport";
 
-    fn send(&mut self, data: &[u8], addr: &Self::Addr) {
-        self.networking_messages
-            .send_message_to_user(
-                NetworkingIdentity::new_steam_id(*addr),
-                SendFlags::UNRELIABLE_NO_NAGLE,
-                data,
-                self.channel,
-            )
-            .unwrap();
+    fn send(&mut self, data: &[u8], addr: &Self::Addr) -> Result<(), TransportError> {
+        self.networking_messages.send_message_to_user(
+            NetworkingIdentity::new_steam_id(*addr),
+            SendFlags::UNRELIABLE_NO_NAGLE,
+            data,
+            self.channel,
+        )?;
+
+        Ok(())
     }
 
-    fn receive(&mut self) -> Vec<(Self::Addr, Vec<u8>)> {
-        self.networking_messages
+    fn try_receive(&mut self) -> Result<Vec<(Self::Addr, Vec<u8>)>, TransportError> {
+        Ok(self
+            .networking_messages
             .receive_messages_on_channel(self.channel, RECV_BATCH_SIZE)
             .iter()
             .map(|x| (x.identity_peer().steam_id().unwrap(), x.data().to_vec()))
-            .collect()
+            .collect())
     }
 
     fn construct(config: &Self::Config) -> Result<Self, TransportError> {
