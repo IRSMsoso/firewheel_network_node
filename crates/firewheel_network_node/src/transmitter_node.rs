@@ -7,20 +7,18 @@ use crate::network_io::{
 };
 use crate::transport::NetworkNodeTransport;
 use firewheel_core::channel_config::{ChannelConfig, ChannelCount};
-use firewheel_core::diff::{Diff, Patch, PatchError};
-use firewheel_core::event::ParamData;
+use firewheel_core::diff::{Diff, Patch};
 use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
 use opus_rs::{Application, OpusEncoder};
 use std::fmt::{Display, Formatter};
-use std::marker::PhantomData;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc;
 use std::thread::spawn;
 use thiserror::Error;
 
-struct NetworkTransmitterNodeConfig<T>
+pub struct NetworkTransmitterNodeConfig<T>
 where
     T: NetworkNodeTransport,
 {
@@ -38,7 +36,7 @@ where
 {
     fn default() -> Self {
         Self {
-            channels: Channels::Mono,
+            channels: 1,
             application: Application::Audio,
             transport_config: Default::default(),
         }
@@ -54,25 +52,10 @@ pub struct NetworkTransmitterNode<T>
 where
     T: NetworkNodeTransport,
 {
+    /// The network address of the node to send audio to
     address: T::Addr,
     /// The network identifier of the node to send audio to
     node_net_id: u32,
-    phantom_data: PhantomData<T>,
-}
-
-impl<T> Patch for NetworkTransmitterNode<T>
-where
-    T: NetworkNodeTransport,
-{
-    type Patch = ();
-
-    fn patch(data: &ParamData, path: &[u32]) -> Result<Self::Patch, PatchError> {
-        todo!()
-    }
-
-    fn apply(&mut self, patch: Self::Patch) {
-        todo!()
-    }
 }
 
 impl<T> NetworkTransmitterNode<T>
@@ -83,7 +66,6 @@ where
         Self {
             address,
             node_net_id,
-            phantom_data: Default::default(),
         }
     }
 }
@@ -152,29 +134,13 @@ where
                 configuration.application,
             )
             .map_err(|e| OpusError(e))?,
-            channels: configuration.channels,
-            address: self.address.clone(),
+            opus_channels: configuration.channels,
             producer,
             encoding_buffer: [0; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
+            address: self.address.clone(),
+            node_net_id: self.node_net_id,
         })
     }
-}
-
-enum TransmitterNetworkControlMessage<T>
-where
-    T: NetworkNodeTransport,
-{
-    ChangeAddress(T::Addr),
-}
-
-pub struct NetworkTransmitterNodeDestination<T>
-where
-    T: NetworkNodeTransport,
-{
-    /// The address to send audio data to
-    address: Arc<Mutex<T::Addr>>,
-    /// The network identifier of the node to send audio to
-    node_net_id: u32,
 }
 
 struct NetworkTransmitterNodeProcessor<T>
@@ -184,14 +150,17 @@ where
     /// The opus encoder state
     encoder: OpusEncoder,
     /// The number of opus channels to use, Mono or Stereo
-    channels: usize,
-    /// The destination of the audio data
-    address: T::Addr,
+    opus_channels: usize,
     /// The producer side of the network thread communication ringbuffer
     producer: rtrb::Producer<TransmitterNodeNetworkMessage<T>>,
-
     /// Encoding buffer
     encoding_buffer: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
+
+    // Patched
+    /// The network address of the node to send audio to
+    address: T::Addr,
+    /// The network identifier of the node to send audio to
+    node_net_id: u32,
 }
 
 impl<T> AudioNodeProcessor for NetworkTransmitterNodeProcessor<T>
@@ -204,6 +173,9 @@ where
         buffers: ProcBuffers,
         extra: &mut ProcExtra,
     ) -> ProcessStatus {
+        // Our processor inputs must equal our opus configuration
+        debug_assert_eq!(self.opus_channels, buffers.inputs.len());
+
         let len = match buffers.inputs.len() {
             1 => {
                 let Ok(len) =
@@ -252,6 +224,7 @@ where
         // TODO: Is this a valid strategy?
         let _ = self.producer.push(TransmitterNodeNetworkMessage {
             address: self.address.clone(),
+            node_net_id: self.node_net_id,
             encoded_data: self.encoding_buffer,
             encoded_len: len,
         });

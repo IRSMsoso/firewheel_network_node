@@ -760,6 +760,7 @@ dependencies = [
  "bincode",
  "firewheel-core",
  "lazy_static",
+ "log",
  "opus-rs",
  "rtrb",
  "serde",

@@ -1,6 +1,8 @@
 use crate::constants::TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE;
 use crate::transport::NetworkNodeTransport;
 use lazy_static::lazy_static;
+use log::error;
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Mutex;
@@ -33,10 +35,26 @@ pub(crate) fn network_thread<T>(
     transmitters.retain_mut(|transmitter| {
         match transmitter.consumer.pop() {
             Ok(message) => {
-                transport.send(
-                    &message.encoded_data[0..message.encoded_len],
-                    &message.address,
-                );
+                // Receiving machine also needs to know node_net_id to properly route, include that as well
+                let final_message = FinalNetworkMessage {
+                    node_net_id: message.node_net_id,
+                    encoded: &message.encoded_data[0..message.encoded_len],
+                };
+
+                let serialized =
+                    match bincode::serde::encode_to_vec(final_message, bincode::config::standard())
+                    {
+                        Ok(serialized) => serialized,
+                        Err(e) => {
+                            error!(
+                                "Failed to encode final network message while transmitting: {e}"
+                            );
+                            // We skip this one
+                            return true;
+                        }
+                    };
+
+                transport.send(&serialized, &message.address);
                 true
             }
             Err(_) => {
@@ -51,6 +69,12 @@ pub(crate) fn network_thread<T>(
     });
 }
 
+#[derive(Serialize, Deserialize)]
+struct FinalNetworkMessage<'a> {
+    node_net_id: u32,
+    encoded: &'a [u8],
+}
+
 struct NetworkThreadTransmitterNodeData<T>
 where
     T: NetworkNodeTransport,
@@ -63,6 +87,7 @@ where
     T: NetworkNodeTransport,
 {
     pub(crate) address: T::Addr,
+    pub(crate) node_net_id: u32,
     pub(crate) encoded_data: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
     pub(crate) encoded_len: usize,
 }
