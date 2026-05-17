@@ -15,7 +15,6 @@ use firewheel_core::node::{
 use opus_rs::{Application, OpusEncoder};
 use std::fmt::{Display, Formatter};
 use std::sync::mpsc;
-use std::thread::spawn;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,9 +116,11 @@ where
                 // Initialize control channel for this transport type
                 let (sender, receiver) = mpsc::channel::<NetworkThreadControlMessage<T>>();
 
-                spawn(|| {
-                    network_thread(transport, receiver);
-                });
+                std::thread::Builder::new()
+                    .name(T::NAME.to_string())
+                    .spawn(|| {
+                        network_thread(transport, receiver);
+                    })?;
 
                 network_thread_registry_lock.insert::<NetworkThreadRegistryKey<T>>(sender.clone());
 
@@ -149,6 +150,17 @@ where
             opus_channels: configuration.channels,
             producer,
             encoding_buffer: [0; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
+            interleaving_buffer: match configuration.channels {
+                1 => None,
+                2 => {
+                    // Preallocate interleaving space
+                    Some(vec![
+                        0.0;
+                        cx.stream_info.max_block_frames.get() as usize * 2
+                    ])
+                }
+                _ => unreachable!(),
+            },
             address: self.address.clone(),
             node_net_id: self.node_net_id,
         })
@@ -167,6 +179,8 @@ where
     producer: rtrb::Producer<TransmitterNodeNetworkMessage<T>>,
     /// Encoding buffer
     encoding_buffer: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
+    /// Interleaving buffer.
+    interleaving_buffer: Option<Vec<f32>>,
 
     // Patched
     /// The network address of the node to send audio to
@@ -200,23 +214,25 @@ where
                 len
             }
             2 => {
-                // For stereo, we must interleave the channels for opus. Use scratch buffers provided by firewheel to do this.
+                let interleaving_buffer = self.interleaving_buffer.as_mut().expect(
+                    "If two channels are presence, should have allocated interleaving buffer",
+                );
+
+                // For stereo, we must interleave the channels for opus.
                 let num_samples = buffers.inputs[0].len();
 
-                assert!(extra.scratch_buffers.first_mut().len() >= num_samples * 2);
+                debug_assert!(interleaving_buffer.len() >= num_samples * 2);
 
                 // Assumption: buffers.inputs[0].len() == buffers.inputs[1].len()
                 assert_eq!(buffers.inputs[0].len(), buffers.inputs[1].len());
 
                 for sample_index in 0..buffers.inputs[0].len() {
-                    extra.scratch_buffers.first_mut()[sample_index * 2] =
-                        buffers.inputs[0][sample_index];
-                    extra.scratch_buffers.first_mut()[sample_index * 2 + 1] =
-                        buffers.inputs[1][sample_index];
+                    interleaving_buffer[sample_index * 2] = buffers.inputs[0][sample_index];
+                    interleaving_buffer[sample_index * 2 + 1] = buffers.inputs[1][sample_index];
                 }
 
                 let Ok(len) = self.encoder.encode(
-                    &extra.scratch_buffers.first()[0..(num_samples * 2)],
+                    &interleaving_buffer[0..(num_samples * 2)],
                     info.frames,
                     &mut self.encoding_buffer,
                 ) else {

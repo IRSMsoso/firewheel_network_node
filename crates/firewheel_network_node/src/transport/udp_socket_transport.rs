@@ -14,6 +14,7 @@ impl Default for UdpSocketTransportConfig {
     }
 }
 
+/// A network transport that uses straight UDP sockets
 pub struct UdpSocketTransport {
     socket: UdpSocket,
 }

@@ -21,29 +21,31 @@ pub(crate) fn network_thread<T>(
 {
     let mut transmitters: Vec<NetworkThreadTransmitterNodeData<T>> = Vec::new();
 
-    // First, any control messages
-    while let Ok(control_message) = control_message_receiver.try_recv() {
-        match control_message {
-            NetworkThreadControlMessage::RegisterTransmitter { consumer } => {
-                transmitters.push(NetworkThreadTransmitterNodeData { consumer });
+    loop {
+        // First, any control messages
+        while let Ok(control_message) = control_message_receiver.try_recv() {
+            match control_message {
+                NetworkThreadControlMessage::RegisterTransmitter { consumer } => {
+                    transmitters.push(NetworkThreadTransmitterNodeData { consumer });
+                }
+                NetworkThreadControlMessage::RegisterReceiver => {}
             }
-            NetworkThreadControlMessage::RegisterReceiver => {}
         }
-    }
 
-    // Then, pull encoded bytes for every transmitter and transmit that data
-    transmitters.retain_mut(|transmitter| {
-        match transmitter.consumer.pop() {
-            Ok(message) => {
-                // Receiving machine also needs to know node_net_id to properly route, include that as well
-                let final_message = FinalNetworkMessage {
-                    node_net_id: message.node_net_id,
-                    encoded: &message.encoded_data[0..message.encoded_len],
-                };
+        // Then, pull encoded bytes for every transmitter and transmit that data
+        transmitters.retain_mut(|transmitter| {
+            match transmitter.consumer.pop() {
+                Ok(message) => {
+                    // Receiving machine also needs to know node_net_id to properly route, include that as well
+                    let final_message = FinalNetworkMessage {
+                        node_net_id: message.node_net_id,
+                        encoded: &message.encoded_data[0..message.encoded_len],
+                    };
 
-                let serialized =
-                    match bincode::serde::encode_to_vec(final_message, bincode::config::standard())
-                    {
+                    let serialized = match bincode::serde::encode_to_vec(
+                        final_message,
+                        bincode::config::standard(),
+                    ) {
                         Ok(serialized) => serialized,
                         Err(e) => {
                             error!(
@@ -54,15 +56,17 @@ pub(crate) fn network_thread<T>(
                         }
                     };
 
-                transport.send(&serialized, &message.address);
-                true
+                    // Silently fail. TODO: Change?
+                    let _ = transport.send(&serialized, &message.address);
+                    true
+                }
+                Err(_) => {
+                    // Buffer is empty, if we also are abandoned, filter from transmitters we're tracking (The transmitter node producing has been removed)
+                    !transmitter.consumer.is_abandoned()
+                }
             }
-            Err(_) => {
-                // Buffer is empty, if we also are abandoned, filter from transmitters we're tracking (The transmitter node producing has been removed)
-                !transmitter.consumer.is_abandoned()
-            }
-        }
-    });
+        });
+    }
 }
 
 #[derive(Serialize, Deserialize)]
