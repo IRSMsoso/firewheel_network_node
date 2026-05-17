@@ -27,8 +27,6 @@ where
     pub channels: usize,
     /// The configuration for the transport used to send/receive data
     pub transport_config: T::Config,
-    /// The network identifier of this receiver node. Cannot change.
-    node_net_id: u32,
 }
 
 impl<T> Default for NetworkReceiverNodeConfig<T>
@@ -39,7 +37,6 @@ where
         Self {
             channels: 1,
             transport_config: Default::default(),
-            node_net_id: 0,
         }
     }
 }
@@ -53,6 +50,9 @@ pub struct NetworkReceiverNode<T>
 where
     T: NetworkNodeTransport,
 {
+    /// The network identifier of this receiver node. Cannot change.
+    pub node_net_id: u32,
+
     _phantom: PhantomData<T>,
 }
 
@@ -62,6 +62,7 @@ where
 {
     pub fn new(node_net_id: u32) -> Self {
         Self {
+            node_net_id,
             _phantom: PhantomData,
         }
     }
@@ -117,7 +118,7 @@ where
         sender
             .send(NetworkThreadControlMessage::RegisterReceiver {
                 producer,
-                node_net_id: configuration.node_net_id,
+                node_net_id: self.node_net_id,
             })
             .expect("Network thread should never stop");
 

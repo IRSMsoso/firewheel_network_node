@@ -3,29 +3,29 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
 pub struct UdpSocketTransportConfig {
-    pub receive_port: u16,
+    pub port: u16,
 }
 
 impl Default for UdpSocketTransportConfig {
     fn default() -> Self {
-        Self {
-            receive_port: 16805,
-        }
+        Self { port: 16805 }
     }
 }
 
 /// A network transport that uses straight UDP sockets
 pub struct UdpSocketTransport {
     socket: UdpSocket,
+    port: u16,
 }
 
 impl NetworkNodeTransport for UdpSocketTransport {
-    type Addr = SocketAddr;
+    type Addr = IpAddr;
     type Config = UdpSocketTransportConfig;
     const NAME: &'static str = "Udp Socket Transport";
 
     fn send(&mut self, data: &[u8], addr: &Self::Addr) -> Result<(), TransportError> {
-        self.socket.send_to(data, addr)?;
+        self.socket
+            .send_to(data, SocketAddr::new(*addr, self.port))?;
 
         Ok(())
     }
@@ -47,7 +47,7 @@ impl NetworkNodeTransport for UdpSocketTransport {
                 }
             };
 
-            messages.push((address, buf));
+            messages.push((address.ip(), buf));
         }
 
         Ok(messages)
@@ -56,11 +56,14 @@ impl NetworkNodeTransport for UdpSocketTransport {
     fn construct(config: &Self::Config) -> Result<Self, TransportError> {
         let socket = UdpSocket::bind(SocketAddr::from((
             IpAddr::from(Ipv4Addr::UNSPECIFIED),
-            config.receive_port,
+            config.port,
         )))?;
 
         socket.set_nonblocking(true)?;
 
-        Ok(Self { socket })
+        Ok(Self {
+            socket,
+            port: config.port,
+        })
     }
 }
