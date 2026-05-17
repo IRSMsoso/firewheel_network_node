@@ -18,16 +18,23 @@ use std::sync::mpsc;
 use std::thread::spawn;
 use thiserror::Error;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpusApplicationType {
+    Voip,
+    Audio,
+    RestrictedLowDelay,
+}
+
 pub struct NetworkTransmitterNodeConfig<T>
 where
     T: NetworkNodeTransport,
 {
     /// The number of channels of input to pass to the Opus Encoder. Must match the receiver node
-    channels: usize,
+    pub channels: usize,
     /// Type of application passed to the Opus Encoder. Must match the receiver node
-    application: Application,
+    pub opus_application_type: OpusApplicationType,
     /// The configuration for the transport used to send data
-    transport_config: T::Config,
+    pub transport_config: T::Config,
 }
 
 impl<T> Default for NetworkTransmitterNodeConfig<T>
@@ -37,7 +44,7 @@ where
     fn default() -> Self {
         Self {
             channels: 1,
-            application: Application::Audio,
+            opus_application_type: OpusApplicationType::Audio,
             transport_config: Default::default(),
         }
     }
@@ -103,7 +110,8 @@ where
 
         let sender = match network_thread_registry_lock.get::<NetworkThreadRegistryKey<T>>() {
             None => {
-                // Initialize actual transport for this transpor type
+                // TODO: Initialize the transport outside of the construction of the processor, in some method that the user is responsible for calling beforehand. This removes the issue of "the first node to activate the spawning of the thread decies the config and all other nodes have redundant/unused transport config data
+                // Initialize actual transport for this transport type
                 let transport = T::construct(&configuration.transport_config)?;
 
                 // Initialize control channel for this transport type
@@ -131,9 +139,13 @@ where
             encoder: OpusEncoder::new(
                 cx.stream_info.sample_rate.get() as i32,
                 configuration.channels,
-                configuration.application,
+                match configuration.opus_application_type {
+                    OpusApplicationType::Voip => Application::Voip,
+                    OpusApplicationType::Audio => Application::Audio,
+                    OpusApplicationType::RestrictedLowDelay => Application::RestrictedLowDelay,
+                },
             )
-            .map_err(|e| OpusError(e))?,
+            .map_err(OpusError)?,
             opus_channels: configuration.channels,
             producer,
             encoding_buffer: [0; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],

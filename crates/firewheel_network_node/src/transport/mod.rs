@@ -4,40 +4,41 @@ use std::error::Error;
 
 #[cfg(feature = "steam_networking_messages")]
 pub mod steam_transport;
+pub mod udp_socket_transport;
 
 /// Trait-based catchall error type for node trait methods
 #[derive(Debug)]
-pub struct TransportConstructionError(pub Box<dyn Error>);
+pub struct TransportError(pub Box<dyn Error>);
 
-impl TransportConstructionError {
+impl TransportError {
     pub const fn from_boxed(error: Box<dyn Error>) -> Self {
         Self(error)
     }
 }
 
-impl<E> From<E> for TransportConstructionError
+impl<E> From<E> for TransportError
 where
     E: Error + 'static,
 {
     fn from(err: E) -> Self {
-        TransportConstructionError(Box::new(err))
+        TransportError(Box::new(err))
     }
 }
 
-impl fmt::Display for TransportConstructionError {
+impl fmt::Display for TransportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Transport Construction Error: {}", self.0)
     }
 }
 
-impl From<TransportConstructionError> for Box<dyn Error> {
-    fn from(value: TransportConstructionError) -> Self {
+impl From<TransportError> for Box<dyn Error> {
+    fn from(value: TransportError) -> Self {
         value.0
     }
 }
 
-impl From<TransportConstructionError> for NodeError {
-    fn from(value: TransportConstructionError) -> Self {
+impl From<TransportError> for NodeError {
+    fn from(value: TransportError) -> Self {
         Self { 0: value.0 }
     }
 }
@@ -45,22 +46,14 @@ impl From<TransportConstructionError> for NodeError {
 pub trait NetworkNodeTransport: Send + Sized + 'static {
     type Addr: Clone + Send;
     type Config: Default;
+    const NAME: &'static str;
 
-    fn send(&mut self, data: &[u8], addr: &Self::Addr);
+    /// Called by the network thread for a transport to send data to some network address
+    fn send(&mut self, data: &[u8], addr: &Self::Addr) -> Result<(), TransportError>;
 
-    fn receive(&mut self) -> Vec<(Self::Addr, Vec<u8>)>;
+    /// Called by the network thread for a transport to receive data. Must not block. Should receive all the messages it can until needing to block.
+    fn try_receive(&mut self) -> Result<Vec<(Self::Addr, Vec<u8>)>, TransportError>;
 
-    fn construct(config: &Self::Config) -> Result<Self, TransportConstructionError>;
+    /// Constructs an instance of a transport via some config
+    fn construct(config: &Self::Config) -> Result<Self, TransportError>;
 }
-
-// pub trait NonBlockingSocket<A>: Send + Sync
-// where
-//     A: Clone + PartialEq + Eq + Hash + Send + Sync,
-// {
-//     /// Takes a [`Message`] and sends it to the given address.
-//     fn send_to(&mut self, msg: &Message, addr: &A);
-//
-//     /// This method should return all messages received since the last time this method was called.
-//     /// The pairs `(A, Message)` indicate from which address each packet was received.
-//     fn receive_all_messages(&mut self) -> Vec<(A, Message)>;
-// }

@@ -614,7 +614,7 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 [[package]]
 name = "firewheel"
 version = "0.10.0"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "firewheel-core",
  "firewheel-cpal",
@@ -629,7 +629,7 @@ dependencies = [
 [[package]]
 name = "firewheel-core"
 version = "0.10.1"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "arrayvec",
  "audioadapter",
@@ -655,7 +655,7 @@ dependencies = [
 [[package]]
 name = "firewheel-cpal"
 version = "0.10.0"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "audioadapter-buffers",
  "bevy_platform",
@@ -670,7 +670,7 @@ dependencies = [
 [[package]]
 name = "firewheel-graph"
 version = "0.10.1"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "arrayvec",
  "audioadapter",
@@ -690,7 +690,7 @@ dependencies = [
 [[package]]
 name = "firewheel-macros"
 version = "0.10.0"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "bevy_macro_utils",
  "proc-macro2",
@@ -702,7 +702,7 @@ dependencies = [
 [[package]]
 name = "firewheel-nodes"
 version = "0.10.0"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "bevy_ecs",
  "bevy_platform",
@@ -717,7 +717,7 @@ dependencies = [
 [[package]]
 name = "firewheel-pool"
 version = "0.10.0"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "bevy_platform",
  "firewheel-core",
@@ -731,7 +731,7 @@ dependencies = [
 [[package]]
 name = "firewheel-rtaudio"
 version = "0.10.0"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "audioadapter-buffers",
  "bevy_platform",
@@ -745,7 +745,7 @@ dependencies = [
 [[package]]
 name = "firewheel-symphonium"
 version = "0.10.0"
-source = "git+https://github.com/BillyDM/Firewheel?branch=main#c869f338896514741bb19a3b45e3f874c7e68404"
+source = "git+https://github.com/BillyDM/Firewheel?branch=main#71fbe0f7bfb0569a725bee9d739d0603f97eef3d"
 dependencies = [
  "bevy_platform",
  "firewheel-core",

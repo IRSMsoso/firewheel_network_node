@@ -1,4 +1,4 @@
-use crate::transport::{NetworkNodeTransport, TransportConstructionError};
+use crate::transport::{NetworkNodeTransport, TransportError};
 use std::fmt::{Display, Formatter};
 use steamworks::networking_messages::NetworkingMessages;
 use steamworks::networking_types::{NetworkingIdentity, SendFlags};
@@ -67,7 +67,7 @@ impl NetworkNodeTransport for SteamNetworkingMessagesTransport {
             .collect()
     }
 
-    fn construct(config: &Self::Config) -> Result<Self, TransportConstructionError> {
+    fn construct(config: &Self::Config) -> Result<Self, TransportError> {
         Ok(Self {
             networking_messages: config
                 .steam_client

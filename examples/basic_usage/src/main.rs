@@ -1,7 +1,14 @@
 use firewheel::cpal::CpalStream;
 use firewheel::nodes::sampler::{SamplerNode, SamplerState};
 use firewheel::FirewheelContext;
+use firewheel_network_node::transmitter_node::{
+    NetworkTransmitterNode, NetworkTransmitterNodeConfig, OpusApplicationType,
+};
+use firewheel_network_node::transport::udp_socket_transport::{
+    UdpSocketTransport, UdpSocketTransportConfig,
+};
 use log::error;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 const UPDATE_INTERVAL: Duration = Duration::from_millis(15);
@@ -29,10 +36,31 @@ fn main() {
     cx.connect(sampler_id, graph_out_id, &[(0, 0), (1, 1)], false)
         .unwrap();
 
+    let transmitter_node: NetworkTransmitterNode<UdpSocketTransport> = NetworkTransmitterNode::new(
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 1, 1, 78)), 1680),
+        0,
+    );
+
+    let transmitter_id = cx
+        .add_node(
+            transmitter_node,
+            Some(NetworkTransmitterNodeConfig {
+                channels: 2,
+                opus_application_type: OpusApplicationType::Audio,
+                transport_config: UdpSocketTransportConfig { receive_port: 1680 },
+            }),
+        )
+        .unwrap();
+
+    cx.connect(sampler_id, transmitter_id, &[(0, 0), (1, 1)], true)
+        .unwrap();
+
+    println!("Sample rate: {}", cx.stream_info().unwrap().sample_rate);
+
     // --- Load a sample into memory, and tell the node to use it and play it. -----------
 
     let probed = symphonium::probe_from_file(
-        "examples/basic_usage/assets/arcadia.mp3",
+        "examples/basic_usage/assets/arcadia48000.mp3",
         None, // Custom container probe
     )
     .unwrap();
