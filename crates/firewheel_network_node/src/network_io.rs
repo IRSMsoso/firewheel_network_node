@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Mutex;
-use typemap::ShareMap;
+use typemap_rev::TypeMap;
 
 /// Network thread that manages transmitting audio data from network transmitter nodes and sending received audio data to network receiver nodes
 ///
@@ -104,7 +104,7 @@ where
 
 pub(crate) struct NetworkThreadRegistryKey<T>(PhantomData<T>);
 
-impl<T> typemap::Key for NetworkThreadRegistryKey<T>
+impl<T> typemap_rev::TypeMapKey for NetworkThreadRegistryKey<T>
 where
     T: NetworkNodeTransport,
 {
@@ -113,5 +113,5 @@ where
 
 lazy_static! {
     /// Shared transmitter to send control messages to the networking thread
-    pub(crate) static ref NETWORK_THREAD_REGISTRY: Mutex<ShareMap> = Mutex::new(ShareMap::custom());
+    pub(crate) static ref NETWORK_THREAD_REGISTRY: Mutex<TypeMap> = Mutex::new(TypeMap::custom());
 }
