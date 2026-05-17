@@ -76,7 +76,7 @@ fn main() {
             // --- Load a sample into memory, and tell the node to use it and play it. -----------
 
             let probed = symphonium::probe_from_file(
-                "examples/basic_usage/assets/arcadia48000.mp3",
+                "assets/arcadia48000.mp3",
                 None, // Custom container probe
             )
             .unwrap();
