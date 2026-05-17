@@ -24,3 +24,5 @@ opus-rs = "0.1.22"
 bincode = { version = "2.0.1", features = ["serde"] }
 thiserror = "2.0.18"
 rtrb = "0.3.4"
+typemap = "0.3.3"
+lazy_static = "1.5.0"

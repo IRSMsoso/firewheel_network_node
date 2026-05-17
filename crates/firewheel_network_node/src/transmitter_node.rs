@@ -1,6 +1,10 @@
-use std::fmt::{Display, Formatter};
-use crate::message::NetworkNodeMessage;
-use crate::network_io::SendMessage;
+use crate::constants::{
+    TRANSMITTER_NODE_NETWORK_MESSAGE_RINGBUFFER_SIZE, TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE,
+};
+use crate::network_io::{
+    network_thread, NetworkThreadControlMessage, NetworkThreadRegistryKey,
+    TransmitterNodeNetworkMessage, NETWORK_THREAD_REGISTRY,
+};
 use crate::transport::NetworkNodeTransport;
 use firewheel_core::channel_config::{ChannelConfig, ChannelCount};
 use firewheel_core::diff::{Diff, Patch, PatchError};
@@ -9,9 +13,11 @@ use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
-use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
 use opus_rs::{Application, OpusEncoder};
+use std::fmt::{Display, Formatter};
+use std::marker::PhantomData;
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread::spawn;
 use thiserror::Error;
 
 struct NetworkTransmitterNodeConfig<T>
@@ -109,17 +115,56 @@ where
         configuration: &Self::Configuration,
         cx: ConstructProcessorContext,
     ) -> Result<impl AudioNodeProcessor, NodeError> {
+        // Start the global networking thread if it hasn't already been started
+
+        let mut network_thread_registry_lock = NETWORK_THREAD_REGISTRY.lock().unwrap();
+
+        let sender = match network_thread_registry_lock.get::<NetworkThreadRegistryKey<T>>() {
+            None => {
+                // Initialize actual transport for this transpor type
+                let transport = T::construct(&configuration.transport_config)?;
+
+                // Initialize control channel for this transport type
+                let (sender, receiver) = mpsc::channel::<NetworkThreadControlMessage<T>>();
+
+                spawn(|| {
+                    network_thread(transport, receiver);
+                });
+
+                network_thread_registry_lock.insert::<NetworkThreadRegistryKey<T>>(sender.clone());
+
+                sender
+            }
+            Some(sender) => sender.clone(),
+        };
+
+        let (producer, consumer) =
+            rtrb::RingBuffer::new(TRANSMITTER_NODE_NETWORK_MESSAGE_RINGBUFFER_SIZE);
+
+        sender
+            .send(NetworkThreadControlMessage::RegisterTransmitter { consumer })
+            .expect("Network thread should never stop");
+
         Ok(NetworkTransmitterNodeProcessor::<T> {
-            transport: T::construct(&configuration.transport_config)?,
             encoder: OpusEncoder::new(
                 cx.stream_info.sample_rate.get() as i32,
                 configuration.channels,
                 configuration.application,
-            ).map_err(|e| OpusError(e))?,
+            )
+            .map_err(|e| OpusError(e))?,
             channels: configuration.channels,
             address: self.address.clone(),
+            producer,
+            encoding_buffer: [0; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
         })
     }
+}
+
+enum TransmitterNetworkControlMessage<T>
+where
+    T: NetworkNodeTransport,
+{
+    ChangeAddress(T::Addr),
 }
 
 pub struct NetworkTransmitterNodeDestination<T>
@@ -136,14 +181,17 @@ struct NetworkTransmitterNodeProcessor<T>
 where
     T: NetworkNodeTransport,
 {
-    /// The network transport to use to actually send the data
-    transport: T,
     /// The opus encoder state
     encoder: OpusEncoder,
     /// The number of opus channels to use, Mono or Stereo
     channels: usize,
     /// The destination of the audio data
-    address: Arc<Mutex<T::Addr>>,
+    address: T::Addr,
+    /// The producer side of the network thread communication ringbuffer
+    producer: rtrb::Producer<TransmitterNodeNetworkMessage<T>>,
+
+    /// Encoding buffer
+    encoding_buffer: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
 }
 
 impl<T> AudioNodeProcessor for NetworkTransmitterNodeProcessor<T>
@@ -156,18 +204,19 @@ where
         buffers: ProcBuffers,
         extra: &mut ProcExtra,
     ) -> ProcessStatus {
-        let mut encoded = [0; 256];
-
         let len = match buffers.inputs.len() {
             1 => {
-                let Ok(len) = self.encoder.encode(buffers.inputs[0], info.frames, &mut encoded) else {
+                let Ok(len) =
+                    self.encoder
+                        .encode(buffers.inputs[0], info.frames, &mut self.encoding_buffer)
+                else {
                     return ProcessStatus::Bypass;
                 };
 
                 len
             }
             2 => {
-                // For stereo, we must interleave the channels for opus. Use scratch buffers to do this.
+                // For stereo, we must interleave the channels for opus. Use scratch buffers provided by firewheel to do this.
                 let num_samples = buffers.inputs[0].len();
 
                 assert!(extra.scratch_buffers.first_mut().len() >= num_samples * 2);
@@ -185,7 +234,7 @@ where
                 let Ok(len) = self.encoder.encode(
                     &extra.scratch_buffers.first()[0..(num_samples * 2)],
                     info.frames,
-                    &mut encoded,
+                    &mut self.encoding_buffer,
                 ) else {
                     return ProcessStatus::Bypass;
                 };
@@ -198,18 +247,14 @@ where
             }
         };
 
-        let message = SendMessage {
-            address: self.address,
-            node_net_id: self.node_net_id,
-            encoded,
-        };
-
-        let Ok(serialized) = bincode::serde::encode_to_vec(message, bincode::config::standard())
-        else {
-            return ProcessStatus::Bypass;
-        };
-
-        self.transport.send(&serialized, &self.address);
+        // Push our encoded data to the networking thread via ringbuffer
+        // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
+        // TODO: Is this a valid strategy?
+        let _ = self.producer.push(TransmitterNodeNetworkMessage {
+            address: self.address.clone(),
+            encoded_data: self.encoding_buffer,
+            encoded_len: len,
+        });
 
         ProcessStatus::Bypass
     }
