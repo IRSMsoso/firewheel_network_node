@@ -59,11 +59,7 @@ pub(crate) fn network_thread<T>(
             }
             Err(_) => {
                 // Buffer is empty, if we also are abandoned, filter from transmitters we're tracking (The transmitter node producing has been removed)
-                if transmitter.consumer.is_abandoned() {
-                    false
-                } else {
-                    true
-                }
+                !transmitter.consumer.is_abandoned()
             }
         }
     });
