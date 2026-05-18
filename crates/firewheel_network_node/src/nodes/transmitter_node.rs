@@ -232,18 +232,6 @@ where
                     }
                 }
 
-                let len = match self.encoder.encode(
-                    buffers.inputs[0],
-                    info.frames,
-                    &mut self.encoding_buffer,
-                ) {
-                    Ok(len) => len,
-                    Err(e) => {
-                        warn!("Opus Encoding Error: {e}");
-                        return ProcessStatus::Bypass;
-                    }
-                };
-
                 len
             }
             2 => {
