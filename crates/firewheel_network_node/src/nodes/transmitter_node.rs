@@ -1,5 +1,5 @@
 use crate::constants::{
-    TRANSMITTER_NODE_NETWORK_MESSAGE_RINGBUFFER_SIZE, TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE,
+    NETWORK_MESSAGE_RINGBUFFER_SIZE, TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE,
     TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
 };
 use crate::network_io::{
@@ -119,8 +119,7 @@ where
             Some(sender) => sender.clone(),
         };
 
-        let (producer, consumer) =
-            rtrb::RingBuffer::new(TRANSMITTER_NODE_NETWORK_MESSAGE_RINGBUFFER_SIZE);
+        let (producer, consumer) = rtrb::RingBuffer::new(NETWORK_MESSAGE_RINGBUFFER_SIZE);
 
         sender
             .send(NetworkThreadControlMessage::RegisterTransmitter { consumer })
