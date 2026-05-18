@@ -15,6 +15,7 @@ use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
+use log::warn;
 use opus2::Decoder;
 use std::marker::PhantomData;
 use std::sync::mpsc;
@@ -163,7 +164,8 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
                 true,
             ) {
                 Ok(len) => len,
-                Err(_) => {
+                Err(e) => {
+                    warn!("Opus decoding failed: {}", e);
                     continue;
                 }
             };

@@ -220,7 +220,7 @@ where
                             Err(e) => {
                                 warn!("Opus Encoding Error: {e}");
                                 self.opus_frame_buffer_len = 0;
-                                return ProcessStatus::Bypass;
+                                return ProcessStatus::ClearAllOutputs;
                             }
                         };
 
@@ -264,7 +264,7 @@ where
                             Err(e) => {
                                 warn!("Opus Encoding Error: {e}");
                                 self.opus_frame_buffer_len = 0;
-                                return ProcessStatus::Bypass;
+                                return ProcessStatus::ClearAllOutputs;
                             }
                         };
 
@@ -277,6 +277,6 @@ where
             }
         };
 
-        ProcessStatus::Bypass
+        ProcessStatus::ClearAllOutputs
     }
 }
