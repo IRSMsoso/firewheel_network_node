@@ -1,5 +1,5 @@
 use crate::constants::TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE;
-use crate::transport::{NetworkNodeTransport, TransportError};
+use crate::transport::NetworkNodeTransport;
 use lazy_static::lazy_static;
 use log::{error, warn};
 use serde::{Deserialize, Serialize};

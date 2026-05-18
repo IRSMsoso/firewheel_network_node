@@ -13,7 +13,7 @@ use firewheel_core::channel_config::{ChannelConfig, ChannelCount};
 use firewheel_core::diff::{Diff, Patch};
 use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
-    ProcBuffers, ProcExtra, ProcInfo, ProcessStatus, StreamStatus,
+    ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
 use log::warn;
 use opus2::Decoder;

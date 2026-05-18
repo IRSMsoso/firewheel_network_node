@@ -187,9 +187,9 @@ where
 {
     fn process(
         &mut self,
-        info: &ProcInfo,
+        _info: &ProcInfo,
         buffers: ProcBuffers,
-        extra: &mut ProcExtra,
+        _extra: &mut ProcExtra,
     ) -> ProcessStatus {
         // TODO: Simplify and consolidate 1 and 2 channel paths
         match buffers.inputs.len() {
