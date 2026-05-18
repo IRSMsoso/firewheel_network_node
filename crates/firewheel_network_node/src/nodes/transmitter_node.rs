@@ -13,6 +13,7 @@ use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
+use log::warn;
 use opus_rs::{Application, OpusEncoder};
 use std::sync::mpsc;
 
@@ -214,12 +215,16 @@ where
                     interleaving_buffer[sample_index * 2 + 1] = buffers.inputs[1][sample_index];
                 }
 
-                let Ok(len) = self.encoder.encode(
+                let len = match self.encoder.encode(
                     &interleaving_buffer[0..(num_samples * 2)],
                     info.frames,
                     &mut self.encoding_buffer,
-                ) else {
-                    return ProcessStatus::Bypass;
+                ) {
+                    Ok(len) => len,
+                    Err(e) => {
+                        warn!("Opus Encoding Error: {e}");
+                        return ProcessStatus::Bypass;
+                    }
                 };
 
                 len
