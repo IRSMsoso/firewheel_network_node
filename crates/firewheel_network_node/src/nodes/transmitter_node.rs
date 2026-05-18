@@ -242,6 +242,8 @@ where
                             }
                         };
                     }
+
+                    self.opus_frame_buffer_len += 1;
                 }
 
                 len

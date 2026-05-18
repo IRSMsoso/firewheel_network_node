@@ -89,7 +89,7 @@ pub(crate) fn network_thread<T>(
             .into_iter()
             .filter_map(|x| {
                 match bincode::serde::decode_from_slice(&x.1, bincode::config::standard()) {
-                    Ok(serialized) => Some(serialized.0),
+                    Ok(deserialized) => Some(deserialized.0),
                     Err(e) => {
                         error!("Failed to encode final network message while transmitting: {e}");
                         // We skip this one
