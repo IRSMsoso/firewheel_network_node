@@ -168,7 +168,7 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
                 false,
             ) {
                 Ok(len) => {
-                    // println!("Decoded float buffer length: {}", len);
+                    println!("Decoded float buffer length: {}", len);
                     len
                 }
                 Err(e) => {
