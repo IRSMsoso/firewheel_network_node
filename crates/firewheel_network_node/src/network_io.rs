@@ -1,7 +1,7 @@
 use crate::constants::TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE;
-use crate::transport::NetworkNodeTransport;
+use crate::transport::{NetworkNodeTransport, TransportError};
 use lazy_static::lazy_static;
-use log::error;
+use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::marker::PhantomData;
@@ -64,8 +64,9 @@ pub(crate) fn network_thread<T>(
                         }
                     };
 
-                    // Silently fail. TODO: Change?
-                    let _ = transport.send(&serialized, &message.address);
+                    if let Err(e) = transport.send(&serialized, &message.address) {
+                        warn!("Transport error during sending: {e}");
+                    }
                     true
                 }
                 Err(_) => {
@@ -76,9 +77,12 @@ pub(crate) fn network_thread<T>(
         });
 
         // Receive all messages for transport
-        let Ok(messages) = transport.try_receive() else {
-            // Silently fail. TODO: Change?
-            continue;
+        let messages = match transport.try_receive() {
+            Ok(messages) => messages,
+            Err(e) => {
+                warn!("Transport error during receiving: {e}");
+                continue;
+            }
         };
 
         let sent_messages: Vec<SentNetworkMessage> = messages

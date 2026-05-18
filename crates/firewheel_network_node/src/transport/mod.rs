@@ -27,7 +27,7 @@ where
 
 impl fmt::Display for TransportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Transport Construction Error: {}", self.0)
+        write!(f, "Transport Error: {}", self.0)
     }
 }
 
