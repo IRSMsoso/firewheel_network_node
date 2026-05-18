@@ -4,8 +4,9 @@ use firewheel::FirewheelContext;
 use firewheel_network_node::nodes::receiver_node::{
     NetworkReceiverNode, NetworkReceiverNodeConfig,
 };
+use firewheel_network_node::nodes::shared::{OpusApplicationType, OpusChannels};
 use firewheel_network_node::nodes::transmitter_node::{
-    NetworkTransmitterNode, NetworkTransmitterNodeConfig, OpusApplicationType,
+    NetworkTransmitterNode, NetworkTransmitterNodeConfig,
 };
 use firewheel_network_node::transport::udp_socket_transport::{
     UdpSocketTransport, UdpSocketTransportConfig,
@@ -41,7 +42,7 @@ fn main() {
         .add_node(
             transmitter_node,
             Some(NetworkTransmitterNodeConfig {
-                channels: 1,
+                channels: OpusChannels::Mono,
                 opus_application_type: OpusApplicationType::Audio,
                 transport_config: UdpSocketTransportConfig { port: 1680 },
             }),
@@ -83,7 +84,7 @@ fn main() {
         .add_node(
             receiver_node,
             Some(NetworkReceiverNodeConfig {
-                channels: 1,
+                channels: OpusChannels::Mono,
                 transport_config: UdpSocketTransportConfig { port: 1680 },
             }),
         )

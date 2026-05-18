@@ -6,9 +6,8 @@ use crate::network_io::{
     network_thread, NetworkThreadControlMessage, NetworkThreadRegistryKey,
     TransmitterNodeNetworkThreadMessage, NETWORK_THREAD_REGISTRY,
 };
-pub use crate::nodes::shared::{OpusApplicationType, OpusError};
+use crate::nodes::shared::{OpusApplicationType, OpusChannels};
 use crate::transport::NetworkNodeTransport;
-use circular_buffer::CircularBuffer;
 use firewheel_core::channel_config::{ChannelConfig, ChannelCount};
 use firewheel_core::diff::{Diff, Patch};
 use firewheel_core::node::{
@@ -16,7 +15,7 @@ use firewheel_core::node::{
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
 use log::warn;
-use opus_rs::{Application, OpusEncoder};
+use opus2::{Application, Channels, Encoder};
 use std::sync::mpsc;
 
 pub struct NetworkTransmitterNodeConfig<T>
@@ -24,7 +23,7 @@ where
     T: NetworkNodeTransport,
 {
     /// The number of channels of input to pass to the Opus Encoder. Must match the receiver node
-    pub channels: usize,
+    pub channels: OpusChannels,
     /// Type of application passed to the Opus Encoder. Must match the receiver node
     pub opus_application_type: OpusApplicationType,
     /// The configuration for the transport used to send/receive data
@@ -37,7 +36,7 @@ where
 {
     fn default() -> Self {
         Self {
-            channels: 1,
+            channels: OpusChannels::Mono,
             opus_application_type: OpusApplicationType::Audio,
             transport_config: Default::default(),
         }
@@ -79,7 +78,10 @@ where
 
     fn info(&self, configuration: &Self::Configuration) -> Result<AudioNodeInfo, NodeError> {
         Ok(AudioNodeInfo::new().channel_config(ChannelConfig {
-            num_inputs: configuration.channels.into(),
+            num_inputs: match configuration.channels {
+                OpusChannels::Mono => ChannelCount::MONO,
+                OpusChannels::Stereo => ChannelCount::STEREO,
+            },
             num_outputs: ChannelCount::ZERO,
         }))
     }
@@ -123,36 +125,28 @@ where
             .expect("Network thread should never stop");
 
         Ok(NetworkTransmitterNodeProcessor::<T> {
-            encoder: OpusEncoder::new(
-                cx.stream_info.sample_rate.get() as i32,
-                configuration.channels,
-                match configuration.opus_application_type {
-                    OpusApplicationType::Voip => Application::Voip,
-                    OpusApplicationType::Audio => Application::Audio,
-                    OpusApplicationType::RestrictedLowDelay => Application::RestrictedLowDelay,
-                },
-            )
-            .map_err(OpusError)?,
-            opus_channels: configuration.channels,
+            encoder: Encoder::new(
+                cx.stream_info.sample_rate.get(),
+                configuration.channels.into(),
+                configuration.opus_application_type.into(),
+            )?,
             producer,
             encoding_buffer: [0; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
             interleaving_buffer: match configuration.channels {
-                1 => None,
-                2 => {
+                OpusChannels::Mono => None,
+                OpusChannels::Stereo => {
                     // Preallocate interleaving space
                     Some(vec![
                         0.0;
                         cx.stream_info.max_block_frames.get() as usize * 2
                     ])
                 }
-                _ => unreachable!(),
             },
             opus_frame_buffer: vec![
                 0.0f32;
                 match configuration.channels {
-                    1 => TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
-                    2 => TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2,
-                    _ => unreachable!(),
+                    OpusChannels::Mono => TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
+                    OpusChannels::Stereo => TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2,
                 }
             ],
             opus_frame_buffer_len: 0,
@@ -167,9 +161,7 @@ where
     T: NetworkNodeTransport,
 {
     /// The opus encoder state
-    encoder: OpusEncoder,
-    /// The number of opus channels to use, Mono or Stereo
-    opus_channels: usize,
+    encoder: Encoder,
     /// The producer side of the network thread communication ringbuffer
     producer: rtrb::Producer<TransmitterNodeNetworkThreadMessage<T>>,
     /// Encoding buffer - The buffer that opus frames are encoded into
@@ -198,9 +190,6 @@ where
         buffers: ProcBuffers,
         extra: &mut ProcExtra,
     ) -> ProcessStatus {
-        // Our processor inputs must equal our opus configuration
-        debug_assert_eq!(self.opus_channels, buffers.inputs.len());
-
         // TODO: Simplify and consolidate 1 and 2 channel paths
         match buffers.inputs.len() {
             1 => {
@@ -213,9 +202,8 @@ where
                     self.opus_frame_buffer_len += 1;
 
                     if self.opus_frame_buffer_len == TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE {
-                        match self.encoder.encode(
-                            &self.opus_frame_buffer,
-                            TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
+                        match self.encoder.encode_float(
+                            &self.opus_frame_buffer[0..TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE],
                             &mut self.encoding_buffer,
                         ) {
                             Ok(len) => {
@@ -267,9 +255,9 @@ where
                     self.opus_frame_buffer_len += 1;
 
                     if self.opus_frame_buffer_len == (TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2) {
-                        len += match self.encoder.encode(
-                            &self.opus_frame_buffer,
-                            TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
+                        // TODO: Break this into multiple messages to save headers
+                        len += match self.encoder.encode_float(
+                            &self.opus_frame_buffer[0..TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE],
                             &mut self.encoding_buffer[len..],
                         ) {
                             Ok(len) => len,

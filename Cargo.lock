@@ -866,7 +866,7 @@ dependencies = [
  "firewheel-core",
  "lazy_static",
  "log",
- "opus-rs",
+ "opus2",
  "rtrb",
  "serde",
  "steamworks",
@@ -1138,6 +1138,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
+name = "libopus_sys"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b81c32f233fb2507347a93f97b9919493be9db7ec2249ce2c3ed0c89ad8edf60"
+dependencies = [
+ "cmake",
+ "log",
+ "pkg-config",
+]
+
+[[package]]
 name = "local_test"
 version = "0.1.0"
 dependencies = [
@@ -1381,10 +1392,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "opus-rs"
-version = "0.1.22"
+name = "opus2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28911d75055df30f4e6203424619fd81d6435c5d63a9d9942968848db545f3b9"
+checksum = "49521e33fbf825d2abc8d696506c278cb8469d0c6cc05d3785bef5c5f7ee957b"
+dependencies = [
+ "libopus_sys",
+]
 
 [[package]]
 name = "paste"
