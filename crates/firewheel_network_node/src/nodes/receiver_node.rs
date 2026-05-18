@@ -155,11 +155,6 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
         buffers: ProcBuffers,
         extra: &mut ProcExtra,
     ) -> ProcessStatus {
-        if info.stream_status.contains(StreamStatus::OUTPUT_UNDERFLOW) {
-            // Handle underrun (e.g., log a warning or reset oscillators)
-            let _ = extra.logger.try_error("Output underrun detected!");
-        }
-
         // First, receive anything from network thread
         while let Ok(message) = self.consumer.pop() {
             let mut buf = [0f32; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE];
