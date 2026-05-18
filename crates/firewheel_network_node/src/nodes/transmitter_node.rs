@@ -147,7 +147,14 @@ where
                 }
                 _ => unreachable!(),
             },
-            opus_frame_buffer: [0.0; TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2],
+            opus_frame_buffer: vec![
+                0.0f32;
+                match configuration.channels {
+                    1 => TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
+                    2 => TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2,
+                    _ => unreachable!(),
+                }
+            ],
             opus_frame_buffer_len: 0,
             address: self.address.clone(),
             node_net_id: self.node_net_id,
@@ -170,7 +177,7 @@ where
     /// Interleaving buffer - Used to interleave two channels into one for the opus encoder to process
     interleaving_buffer: Option<Vec<f32>>,
     /// Opus frame buffer - buffers input into the transmitter node until it hits a certain frame size compatible with the opus codec
-    opus_frame_buffer: [f32; TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2],
+    opus_frame_buffer: Vec<f32>,
     /// Opus frame buffer index
     opus_frame_buffer_len: usize,
 
@@ -194,8 +201,37 @@ where
         // Our processor inputs must equal our opus configuration
         debug_assert_eq!(self.opus_channels, buffers.inputs.len());
 
+        // TODO: Simplify and consolidate 1 and 2 channel paths
         let len = match buffers.inputs.len() {
             1 => {
+                let mut len = 0;
+
+                let num_samples = buffers.inputs[0].len();
+
+                for sample_index in 0..num_samples {
+                    self.opus_frame_buffer[self.opus_frame_buffer_len] =
+                        buffers.inputs[0][sample_index];
+
+                    self.opus_frame_buffer_len += 1;
+
+                    if self.opus_frame_buffer_len == TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE {
+                        len += match self.encoder.encode(
+                            &self.opus_frame_buffer,
+                            TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
+                            &mut self.encoding_buffer[len..],
+                        ) {
+                            Ok(len) => len,
+                            Err(e) => {
+                                warn!("Opus Encoding Error: {e}");
+                                self.opus_frame_buffer_len = 0;
+                                return ProcessStatus::Bypass;
+                            }
+                        };
+
+                        self.opus_frame_buffer_len = 0;
+                    }
+                }
+
                 let len = match self.encoder.encode(
                     buffers.inputs[0],
                     info.frames,
