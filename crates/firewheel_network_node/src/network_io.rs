@@ -117,7 +117,7 @@ pub(crate) fn network_thread<T>(
                 let message = ReceiverNodeNetworkThreadMessage {
                     encoded_data: {
                         let mut encoded_data = [0u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE];
-                        encoded_data.copy_from_slice(&sent_message.encoded);
+                        encoded_data[0..len].copy_from_slice(&sent_message.encoded);
                         encoded_data
                     },
                     encoded_len: len,
