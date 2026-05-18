@@ -229,6 +229,8 @@ where
                     self.opus_frame_buffer[self.opus_frame_buffer_len] =
                         interleaving_buffer[sample_index];
 
+                    self.opus_frame_buffer_len += 1;
+
                     if self.opus_frame_buffer_len == TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE {
                         len += match self.encoder.encode(
                             &self.opus_frame_buffer,
@@ -242,8 +244,6 @@ where
                             }
                         };
                     }
-
-                    self.opus_frame_buffer_len += 1;
                 }
 
                 len
