@@ -167,10 +167,10 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
                 &mut buf,
                 false,
             ) {
-                // Ok(len) => {
-                //     println!("Decoded float buffer length: {}", len);
-                //     len
-                // }
+                Ok(len) => {
+                    // println!("Decoded float buffer length: {}", len);
+                    len
+                }
                 Err(e) => {
                     warn!("Opus decoding failed: {}", e);
                     continue;
