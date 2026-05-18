@@ -13,7 +13,7 @@ use firewheel_core::channel_config::{ChannelConfig, ChannelCount};
 use firewheel_core::diff::{Diff, Patch};
 use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
-    ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
+    ProcBuffers, ProcExtra, ProcInfo, ProcessStatus, StreamStatus,
 };
 use log::warn;
 use opus2::Decoder;
@@ -155,6 +155,11 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
         buffers: ProcBuffers,
         extra: &mut ProcExtra,
     ) -> ProcessStatus {
+        if info.stream_status.contains(StreamStatus::OUTPUT_UNDERFLOW) {
+            // Handle underrun (e.g., log a warning or reset oscillators)
+            let _ = extra.logger.try_error("Output underrun detected!");
+        }
+
         // First, receive anything from network thread
         while let Ok(message) = self.consumer.pop() {
             let mut buf = [0f32; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE];
@@ -169,7 +174,7 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
                 false,
             ) {
                 Ok(len) => {
-                    // println!("Success: Decoded: {:?}", buf[0..len].to_vec());
+                    // println!("Decoded float buffer length: {}", len);
                     len
                 }
                 Err(e) => {
@@ -178,16 +183,29 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
                 }
             };
 
+            if self.buffer.len() + len > RECEIVER_NODE_BUFFER_SIZE {
+                let _ = extra.logger.try_error(
+                    "Internal receiver buffer lack capacity, decoded frames being dropped!",
+                );
+            }
+
             self.buffer.extend_from_slice(&buf[0..len]);
         }
 
+        // Copy decoded internal buffer to output buffer
         match buffers.outputs.len() {
             1 => {
                 let mut index = 0;
                 while let Some(value) = self.buffer.pop_front() {
                     buffers.outputs[0][index] = value;
                     index += 1;
+
+                    if index == info.frames {
+                        return ProcessStatus::OutputsModified;
+                    }
                 }
+
+                let _ = extra.logger.try_error("RAN OUT OF INTERNAL BUFFER");
             }
             2 => {
                 let mut index = 0;
