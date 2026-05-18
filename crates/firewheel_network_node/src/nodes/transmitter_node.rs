@@ -200,6 +200,7 @@ where
                     self.encoder
                         .encode(buffers.inputs[0], info.frames, &mut self.encoding_buffer)
                 else {
+                    warn!("Opus Encoding Error: {e}");
                     return ProcessStatus::Bypass;
                 };
 
