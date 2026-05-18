@@ -147,7 +147,7 @@ where
                 }
                 _ => unreachable!(),
             },
-            opus_frame_buffer: [0.0; TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE],
+            opus_frame_buffer: [0.0; TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2],
             opus_frame_buffer_len: 0,
             address: self.address.clone(),
             node_net_id: self.node_net_id,
@@ -170,7 +170,7 @@ where
     /// Interleaving buffer - Used to interleave two channels into one for the opus encoder to process
     interleaving_buffer: Option<Vec<f32>>,
     /// Opus frame buffer - buffers input into the transmitter node until it hits a certain frame size compatible with the opus codec
-    opus_frame_buffer: [f32; TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE],
+    opus_frame_buffer: [f32; TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2],
     /// Opus frame buffer index
     opus_frame_buffer_len: usize,
 
@@ -231,7 +231,7 @@ where
 
                     self.opus_frame_buffer_len += 1;
 
-                    if self.opus_frame_buffer_len == TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE {
+                    if self.opus_frame_buffer_len == (TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2) {
                         len += match self.encoder.encode(
                             &self.opus_frame_buffer,
                             TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
@@ -240,6 +240,7 @@ where
                             Ok(len) => len,
                             Err(e) => {
                                 warn!("Opus Encoding Error: {e}");
+                                self.opus_frame_buffer_len = 0;
                                 return ProcessStatus::Bypass;
                             }
                         };
