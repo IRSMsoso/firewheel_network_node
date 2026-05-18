@@ -208,10 +208,10 @@ where
                             &mut self.encoding_buffer,
                         ) {
                             Ok(len) => {
-                                println!(
-                                    "Encoded float buffer length: {}",
-                                    TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE
-                                );
+                                // println!(
+                                //     "Encoded float buffer length: {}",
+                                //     TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE
+                                // );
                                 // println!(
                                 //     "Floats (with len {}): {:?}",
                                 //     TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
