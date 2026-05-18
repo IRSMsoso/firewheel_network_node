@@ -243,6 +243,8 @@ where
                                 return ProcessStatus::Bypass;
                             }
                         };
+
+                        self.opus_frame_buffer_len = 0;
                     }
                 }
 
