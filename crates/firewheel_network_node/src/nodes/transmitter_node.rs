@@ -1,5 +1,6 @@
 use crate::constants::{
     TRANSMITTER_NODE_NETWORK_MESSAGE_RINGBUFFER_SIZE, TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE,
+    TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
 };
 use crate::network_io::{
     network_thread, NetworkThreadControlMessage, NetworkThreadRegistryKey,
@@ -7,6 +8,7 @@ use crate::network_io::{
 };
 pub use crate::nodes::shared::{OpusApplicationType, OpusError};
 use crate::transport::NetworkNodeTransport;
+use circular_buffer::CircularBuffer;
 use firewheel_core::channel_config::{ChannelConfig, ChannelCount};
 use firewheel_core::diff::{Diff, Patch};
 use firewheel_core::node::{
@@ -145,6 +147,7 @@ where
                 }
                 _ => unreachable!(),
             },
+            opus_frame_buffer: CircularBuffer::new(),
             address: self.address.clone(),
             node_net_id: self.node_net_id,
         })
@@ -161,10 +164,12 @@ where
     opus_channels: usize,
     /// The producer side of the network thread communication ringbuffer
     producer: rtrb::Producer<TransmitterNodeNetworkThreadMessage<T>>,
-    /// Encoding buffer
+    /// Encoding buffer - The buffer that opus frames are encoded into
     encoding_buffer: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
-    /// Interleaving buffer.
+    /// Interleaving buffer - Used to interleave two channels into one for the opus encoder to process
     interleaving_buffer: Option<Vec<f32>>,
+    /// Opus frame buffer - buffers input into the transmitter node until it hits a certain frame size compatible with the opus codec
+    opus_frame_buffer: CircularBuffer<TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE, f32>,
 
     // Patched
     /// The network address of the node to send audio to
@@ -216,6 +221,7 @@ where
                 }
 
                 // TODO: Buffer input, opus requires certain frame size as input.
+                // CHECKPOINT
                 let len = match self.encoder.encode(
                     &interleaving_buffer[0..(num_samples * 2)],
                     info.frames,
