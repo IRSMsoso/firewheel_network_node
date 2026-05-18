@@ -2,6 +2,8 @@ use crate::transport::{NetworkNodeTransport, TransportError};
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
+pub(crate) const UDP_SOCKET_TRANSPORT_RECV_BUFF_SIZE: usize = 512;
+
 pub struct UdpSocketTransportConfig {
     pub port: u16,
 }
@@ -16,6 +18,8 @@ impl Default for UdpSocketTransportConfig {
 pub struct UdpSocketTransport {
     socket: UdpSocket,
     port: u16,
+
+    recv_buffer: [u8; UDP_SOCKET_TRANSPORT_RECV_BUFF_SIZE],
 }
 
 impl NetworkNodeTransport for UdpSocketTransport {
@@ -34,9 +38,7 @@ impl NetworkNodeTransport for UdpSocketTransport {
         let mut messages = Vec::new();
 
         loop {
-            let mut buf = Vec::new();
-
-            let (_, address) = match self.socket.recv_from(&mut buf) {
+            let (len, address) = match self.socket.recv_from(&mut self.recv_buffer) {
                 Ok(pair) => pair,
                 Err(e) => {
                     if e.kind() == io::ErrorKind::WouldBlock {
@@ -47,7 +49,7 @@ impl NetworkNodeTransport for UdpSocketTransport {
                 }
             };
 
-            messages.push((address.ip(), buf));
+            messages.push((address.ip(), self.recv_buffer[0..len].to_vec()));
         }
 
         Ok(messages)
@@ -64,6 +66,7 @@ impl NetworkNodeTransport for UdpSocketTransport {
         Ok(Self {
             socket,
             port: config.port,
+            recv_buffer: [0u8; UDP_SOCKET_TRANSPORT_RECV_BUFF_SIZE],
         })
     }
 }
