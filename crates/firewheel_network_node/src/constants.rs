@@ -2,4 +2,4 @@ pub(crate) const NETWORK_MESSAGE_RINGBUFFER_SIZE: usize = 32;
 pub(crate) const TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE: usize = 480;
 pub(crate) const TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE: usize = 480;
 
-pub(crate) const RECEIVER_NODE_BUFFER_SIZE: usize = 1024;
+pub(crate) const RECEIVER_NODE_BUFFER_SIZE: usize = 16384;

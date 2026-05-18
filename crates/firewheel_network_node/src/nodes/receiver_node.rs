@@ -179,7 +179,7 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
 
             if self.buffer.len() + len > RECEIVER_NODE_BUFFER_SIZE {
                 let _ = extra.logger.try_error(
-                    "Internal receiver buffer lack capacity, decoded frames being dropped!",
+                    "Internal receiver buffer lacks capacity, decoded frames being dropped!",
                 );
             }
 
