@@ -70,7 +70,7 @@ fn main() {
                 .unwrap();
 
             // Connect sampler to transmitter
-            cx.connect(sampler_id, transmitter_id, &[(0, 0), (0, 1)], true)
+            cx.connect(sampler_id, transmitter_id, &[(0, 0)], true)
                 .unwrap();
 
             // --- Load a sample into memory, and tell the node to use it and play it. -----------
@@ -119,7 +119,7 @@ fn main() {
             let graph_out_id = cx.graph_out_node_id();
 
             // Connect receiver to output
-            cx.connect(receiver_id, graph_out_id, &[(0, 0)], false)
+            cx.connect(receiver_id, graph_out_id, &[(0, 0), (0, 1)], false)
                 .unwrap();
         }
     }
