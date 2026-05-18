@@ -1,0 +1,8 @@
+[package]
+name = "bevy_basic"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy_seedling = { version = "0.7.2", features = ["mp3"] }
+bevy = "0.18.1"
