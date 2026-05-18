@@ -768,7 +768,6 @@ dependencies = [
  "fixed-resample",
  "log",
  "thiserror 2.0.18",
- "tracing",
 ]
 
 [[package]]
@@ -788,7 +787,6 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.18",
  "thunderdome",
- "tracing",
  "triple_buffer",
 ]
 
@@ -845,7 +843,6 @@ dependencies = [
  "log",
  "rtaudio",
  "thiserror 2.0.18",
- "tracing",
 ]
 
 [[package]]
@@ -1544,7 +1541,6 @@ dependencies = [
  "log",
  "rtaudio-sys",
  "thiserror 2.0.18",
- "tracing",
 ]
 
 [[package]]
