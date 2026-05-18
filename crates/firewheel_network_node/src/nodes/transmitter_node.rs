@@ -202,10 +202,8 @@ where
         debug_assert_eq!(self.opus_channels, buffers.inputs.len());
 
         // TODO: Simplify and consolidate 1 and 2 channel paths
-        let len = match buffers.inputs.len() {
+        match buffers.inputs.len() {
             1 => {
-                let mut len = 0;
-
                 let num_samples = buffers.inputs[0].len();
 
                 for sample_index in 0..num_samples {
@@ -215,12 +213,22 @@ where
                     self.opus_frame_buffer_len += 1;
 
                     if self.opus_frame_buffer_len == TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE {
-                        len += match self.encoder.encode(
+                        match self.encoder.encode(
                             &self.opus_frame_buffer,
                             TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
-                            &mut self.encoding_buffer[len..],
+                            &mut self.encoding_buffer,
                         ) {
-                            Ok(len) => len,
+                            Ok(len) => {
+                                // Push our encoded data to the networking thread via ringbuffer
+                                // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
+                                // TODO: Is this a valid strategy?
+                                let _ = self.producer.push(TransmitterNodeNetworkThreadMessage {
+                                    address: self.address.clone(),
+                                    node_net_id: self.node_net_id,
+                                    encoded_data: self.encoding_buffer,
+                                    encoded_len: len,
+                                });
+                            }
                             Err(e) => {
                                 warn!("Opus Encoding Error: {e}");
                                 self.opus_frame_buffer_len = 0;
@@ -231,8 +239,6 @@ where
                         self.opus_frame_buffer_len = 0;
                     }
                 }
-
-                len
             }
             2 => {
                 let interleaving_buffer = self.interleaving_buffer.as_mut().expect(
@@ -277,23 +283,11 @@ where
                         self.opus_frame_buffer_len = 0;
                     }
                 }
-
-                len
             }
             _ => {
                 unreachable!()
             }
         };
-
-        // Push our encoded data to the networking thread via ringbuffer
-        // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
-        // TODO: Is this a valid strategy?
-        let _ = self.producer.push(TransmitterNodeNetworkThreadMessage {
-            address: self.address.clone(),
-            node_net_id: self.node_net_id,
-            encoded_data: self.encoding_buffer,
-            encoded_len: len,
-        });
 
         ProcessStatus::Bypass
     }

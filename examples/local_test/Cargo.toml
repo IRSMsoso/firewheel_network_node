@@ -1,0 +1,11 @@
+[package]
+name = "local_test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+firewheel_network_node = { path = "../../crates/firewheel_network_node" }
+simple_logger = "5.2.0"
+firewheel = { git = "https://github.com/BillyDM/Firewheel", branch = "main" }
+symphonium = { version = "0.9.2", features = ["mp3"] }
+log = "0.4.29"
