@@ -76,13 +76,15 @@ where
     type Configuration = NetworkReceiverNodeConfig<T>;
 
     fn info(&self, configuration: &Self::Configuration) -> Result<AudioNodeInfo, NodeError> {
-        Ok(AudioNodeInfo::new().channel_config(ChannelConfig {
-            num_inputs: ChannelCount::ZERO,
-            num_outputs: match configuration.channels {
-                OpusChannels::Mono => ChannelCount::MONO,
-                OpusChannels::Stereo => ChannelCount::STEREO,
-            },
-        }))
+        Ok(AudioNodeInfo::new()
+            .debug_name("Network Receiver")
+            .channel_config(ChannelConfig {
+                num_inputs: ChannelCount::ZERO,
+                num_outputs: match configuration.channels {
+                    OpusChannels::Mono => ChannelCount::MONO,
+                    OpusChannels::Stereo => ChannelCount::STEREO,
+                },
+            }))
     }
 
     fn construct_processor(
@@ -153,17 +155,23 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
         buffers: ProcBuffers,
         extra: &mut ProcExtra,
     ) -> ProcessStatus {
-        let num_channels = buffers.outputs.len();
-
         // First, receive anything from network thread
         while let Ok(message) = self.consumer.pop() {
             let mut buf = [0f32; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE];
+            // println!(
+            //     "Decoding (with length {}): {:?}",
+            //     message.encoded_len,
+            //     message.encoded_data[0..message.encoded_len].to_vec()
+            // );
             let len = match self.decoder.decode_float(
                 &message.encoded_data[0..message.encoded_len],
                 &mut buf,
-                true,
+                false,
             ) {
-                Ok(len) => len,
+                Ok(len) => {
+                    // println!("Success: Decoded: {:?}", buf[0..len].to_vec());
+                    len
+                }
                 Err(e) => {
                     warn!("Opus decoding failed: {}", e);
                     continue;

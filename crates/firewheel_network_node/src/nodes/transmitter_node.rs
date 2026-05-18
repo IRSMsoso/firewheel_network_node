@@ -77,13 +77,15 @@ where
     type Configuration = NetworkTransmitterNodeConfig<T>;
 
     fn info(&self, configuration: &Self::Configuration) -> Result<AudioNodeInfo, NodeError> {
-        Ok(AudioNodeInfo::new().channel_config(ChannelConfig {
-            num_inputs: match configuration.channels {
-                OpusChannels::Mono => ChannelCount::MONO,
-                OpusChannels::Stereo => ChannelCount::STEREO,
-            },
-            num_outputs: ChannelCount::ZERO,
-        }))
+        Ok(AudioNodeInfo::new()
+            .debug_name("Network Transmitter")
+            .channel_config(ChannelConfig {
+                num_inputs: match configuration.channels {
+                    OpusChannels::Mono => ChannelCount::MONO,
+                    OpusChannels::Stereo => ChannelCount::STEREO,
+                },
+                num_outputs: ChannelCount::ZERO,
+            }))
     }
 
     fn construct_processor(
@@ -207,6 +209,18 @@ where
                             &mut self.encoding_buffer,
                         ) {
                             Ok(len) => {
+                                // println!(
+                                //     "Floats (with len {}): {:?}",
+                                //     TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
+                                //     self.opus_frame_buffer
+                                //         [0..TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE]
+                                //         .to_vec()
+                                // );
+                                // println!(
+                                //     "Successfully encoded to (with len {}): {:?}",
+                                //     len,
+                                //     self.encoding_buffer[0..len].to_vec()
+                                // );
                                 // Push our encoded data to the networking thread via ringbuffer
                                 // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
                                 // TODO: Is this a valid strategy?
