@@ -147,7 +147,8 @@ where
                 }
                 _ => unreachable!(),
             },
-            opus_frame_buffer: CircularBuffer::new(),
+            opus_frame_buffer: [0.0; TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE],
+            opus_frame_buffer_len: 0,
             address: self.address.clone(),
             node_net_id: self.node_net_id,
         })
@@ -169,7 +170,9 @@ where
     /// Interleaving buffer - Used to interleave two channels into one for the opus encoder to process
     interleaving_buffer: Option<Vec<f32>>,
     /// Opus frame buffer - buffers input into the transmitter node until it hits a certain frame size compatible with the opus codec
-    opus_frame_buffer: CircularBuffer<TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE, f32>,
+    opus_frame_buffer: [f32; TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE],
+    /// Opus frame buffer index
+    opus_frame_buffer_len: usize,
 
     // Patched
     /// The network address of the node to send audio to
@@ -220,19 +223,26 @@ where
                     interleaving_buffer[sample_index * 2 + 1] = buffers.inputs[1][sample_index];
                 }
 
-                // TODO: Buffer input, opus requires certain frame size as input.
-                // CHECKPOINT
-                let len = match self.encoder.encode(
-                    &interleaving_buffer[0..(num_samples * 2)],
-                    info.frames,
-                    &mut self.encoding_buffer,
-                ) {
-                    Ok(len) => len,
-                    Err(e) => {
-                        warn!("Opus Encoding Error: {e}");
-                        return ProcessStatus::Bypass;
+                let mut len = 0;
+
+                for sample_index in 0..(num_samples * 2) {
+                    self.opus_frame_buffer[self.opus_frame_buffer_len] =
+                        interleaving_buffer[sample_index];
+
+                    if self.opus_frame_buffer_len == TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE {
+                        len += match self.encoder.encode(
+                            &self.opus_frame_buffer,
+                            TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
+                            &mut self.encoding_buffer[len..],
+                        ) {
+                            Ok(len) => len,
+                            Err(e) => {
+                                warn!("Opus Encoding Error: {e}");
+                                return ProcessStatus::Bypass;
+                            }
+                        };
                     }
-                };
+                }
 
                 len
             }
