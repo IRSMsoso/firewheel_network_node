@@ -215,6 +215,7 @@ where
                     interleaving_buffer[sample_index * 2 + 1] = buffers.inputs[1][sample_index];
                 }
 
+                // TODO: Buffer input, opus requires certain frame size as input.
                 let len = match self.encoder.encode(
                     &interleaving_buffer[0..(num_samples * 2)],
                     info.frames,
