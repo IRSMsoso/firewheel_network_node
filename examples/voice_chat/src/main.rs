@@ -1,10 +1,6 @@
 use clap::Parser;
 use firewheel::channel_config::ChannelCount;
-use firewheel::cpal::cpal::SampleRate;
-use firewheel::cpal::HostId::Wasapi;
-use firewheel::cpal::{
-    CpalConfig, CpalInputConfig, CpalOutputConfig, CpalStream, DeviceId, HostId,
-};
+use firewheel::cpal::CpalStream;
 use firewheel::{FirewheelConfig, FirewheelContext};
 use firewheel_network_node::nodes::receiver_node::{
     NetworkReceiverNode, NetworkReceiverNodeConfig,
@@ -18,7 +14,6 @@ use firewheel_network_node::transport::udp_socket_transport::{
 };
 use log::{error, info};
 use std::net::Ipv4Addr;
-use std::str::FromStr;
 use std::time::Duration;
 
 const UPDATE_INTERVAL: Duration = Duration::from_millis(15);
