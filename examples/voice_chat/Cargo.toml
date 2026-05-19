@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 firewheel_network_node = { path = "../../crates/firewheel_network_node" }
-firewheel = { git = "https://github.com/BillyDM/Firewheel", branch = "main" }
+firewheel = { git = "https://github.com/BillyDM/Firewheel", branch = "main", features = ["rtaudio"] }
 simple_logger = "5.2.0"
 log = "0.4.29"
 clap = { version = "4.6.1", features = ["derive"] }

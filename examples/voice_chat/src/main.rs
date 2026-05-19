@@ -1,6 +1,11 @@
 use clap::Parser;
-use firewheel::cpal::CpalStream;
-use firewheel::FirewheelContext;
+use firewheel::channel_config::ChannelCount;
+use firewheel::cpal::cpal::SampleRate;
+use firewheel::cpal::HostId::Wasapi;
+use firewheel::cpal::{
+    CpalConfig, CpalInputConfig, CpalOutputConfig, CpalStream, DeviceId, HostId,
+};
+use firewheel::{FirewheelConfig, FirewheelContext};
 use firewheel_network_node::nodes::receiver_node::{
     NetworkReceiverNode, NetworkReceiverNodeConfig,
 };
@@ -13,6 +18,7 @@ use firewheel_network_node::transport::udp_socket_transport::{
 };
 use log::{error, info};
 use std::net::Ipv4Addr;
+use std::str::FromStr;
 use std::time::Duration;
 
 const UPDATE_INTERVAL: Duration = Duration::from_millis(15);
@@ -31,7 +37,10 @@ fn main() {
 
     // --- Start the context and get the sample rate of the audio stream. ----------------
 
-    let mut cx = FirewheelContext::new(Default::default());
+    let mut cx = FirewheelContext::new(FirewheelConfig {
+        num_graph_inputs: ChannelCount::MONO,
+        ..Default::default()
+    });
     let mut stream = CpalStream::new(&mut cx, Default::default()).unwrap();
 
     info!("Sample rate: {}", cx.stream_info().unwrap().sample_rate);
@@ -66,7 +75,7 @@ fn main() {
     let graph_out_id = cx.graph_out_node_id();
 
     // Connect input to transmitter
-    cx.connect(graph_in_id, transmitter_id, &[(0, 0), (1, 0)], false)
+    cx.connect(graph_in_id, transmitter_id, &[(0, 0)], false)
         .unwrap();
 
     // Connect receiver to output
