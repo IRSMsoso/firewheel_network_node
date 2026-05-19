@@ -1,6 +1,6 @@
 use clap::Parser;
 use firewheel::channel_config::ChannelCount;
-use firewheel::cpal::CpalStream;
+use firewheel::cpal::{CpalConfig, CpalStream};
 use firewheel::{FirewheelConfig, FirewheelContext};
 use firewheel_network_node::nodes::receiver_node::{
     NetworkReceiverNode, NetworkReceiverNodeConfig,
@@ -36,7 +36,14 @@ fn main() {
         num_graph_inputs: ChannelCount::MONO,
         ..Default::default()
     });
-    let mut stream = CpalStream::new(&mut cx, Default::default()).unwrap();
+    let mut stream = CpalStream::new(
+        &mut cx,
+        CpalConfig {
+            output: Default::default(),
+            input: Some(Default::default()),
+        },
+    )
+    .unwrap();
 
     info!("Sample rate: {}", cx.stream_info().unwrap().sample_rate);
 
@@ -66,15 +73,21 @@ fn main() {
         )
         .unwrap();
 
+    info!("Input Device: {:?}", stream.info().in_device_id);
+    info!("Output Device: {:?}", stream.info().out_device_id);
+
     let graph_in_id = cx.graph_in_node_id();
     let graph_out_id = cx.graph_out_node_id();
 
-    // Connect input to transmitter
-    cx.connect(graph_in_id, transmitter_id, &[(0, 0)], false)
-        .unwrap();
+    // // Connect input to transmitter
+    // cx.connect(graph_in_id, transmitter_id, &[(0, 0)], false)
+    //     .unwrap();
+    //
+    // // Connect receiver to output
+    // cx.connect(receiver_id, graph_out_id, &[(0, 0), (0, 1)], true)
+    //     .unwrap();
 
-    // Connect receiver to output
-    cx.connect(receiver_id, graph_out_id, &[(0, 0), (0, 1)], true)
+    cx.connect(graph_in_id, graph_out_id, &[(0, 0), (0, 1)], false)
         .unwrap();
 
     // --- Simulated update loop ---------------------------------------------------------
