@@ -79,15 +79,12 @@ fn main() {
     let graph_in_id = cx.graph_in_node_id();
     let graph_out_id = cx.graph_out_node_id();
 
-    // // Connect input to transmitter
-    // cx.connect(graph_in_id, transmitter_id, &[(0, 0)], false)
-    //     .unwrap();
-    //
-    // // Connect receiver to output
-    // cx.connect(receiver_id, graph_out_id, &[(0, 0), (0, 1)], true)
-    //     .unwrap();
+    // Connect input to transmitter
+    cx.connect(graph_in_id, transmitter_id, &[(0, 0)], false)
+        .unwrap();
 
-    cx.connect(graph_in_id, graph_out_id, &[(0, 0), (0, 1)], false)
+    // Connect receiver to output
+    cx.connect(receiver_id, graph_out_id, &[(0, 0), (0, 1)], true)
         .unwrap();
 
     // --- Simulated update loop ---------------------------------------------------------
