@@ -1,5 +1,5 @@
 use crate::constants::{
-    NETWORK_MESSAGE_RINGBUFFER_SIZE, TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE,
+    ENCODED_OPUS_BUFFER_SIZE, NETWORK_MESSAGE_RINGBUFFER_SIZE,
     TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
 };
 use crate::network_io::{
@@ -14,8 +14,8 @@ use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
-use log::warn;
 use opus2::Encoder;
+use std::fmt::Write;
 use std::sync::mpsc;
 
 pub struct NetworkTransmitterNodeConfig<T>
@@ -99,7 +99,7 @@ where
 
         let sender = match network_thread_registry_lock.get::<NetworkThreadRegistryKey<T>>() {
             None => {
-                // TODO: Initialize the transport outside of the construction of the processor, in some method that the user is responsible for calling beforehand. This removes the issue of "the first node to activate the spawning of the thread decies the config and all other nodes have redundant/unused transport config data
+                // TODO: Initialize the transport outside of the construction of the processor, in some method that the user is responsible for calling beforehand. This removes the issue of "the first node to activate the spawning of the thread decides the config and all other nodes have redundant/unused transport config data
                 // Initialize actual transport for this transport type
                 let transport = T::construct(&configuration.transport_config)?;
 
@@ -132,7 +132,7 @@ where
                 configuration.opus_application_type.into(),
             )?,
             producer,
-            encoding_buffer: [0; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
+            encoding_buffer: [0; ENCODED_OPUS_BUFFER_SIZE],
             interleaving_buffer: match configuration.channels {
                 OpusChannels::Mono => None,
                 OpusChannels::Stereo => {
@@ -166,7 +166,7 @@ where
     /// The producer side of the network thread communication ringbuffer
     producer: rtrb::Producer<TransmitterNodeNetworkThreadMessage<T>>,
     /// Encoding buffer - The buffer that opus frames are encoded into
-    encoding_buffer: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
+    encoding_buffer: [u8; ENCODED_OPUS_BUFFER_SIZE],
     /// Interleaving buffer - Used to interleave two channels into one for the opus encoder to process
     interleaving_buffer: Option<Vec<f32>>,
     /// Opus frame buffer - buffers input into the transmitter node until it hits a certain frame size compatible with the opus codec
@@ -189,7 +189,7 @@ where
         &mut self,
         _info: &ProcInfo,
         buffers: ProcBuffers,
-        _extra: &mut ProcExtra,
+        extra: &mut ProcExtra,
     ) -> ProcessStatus {
         // TODO: Simplify and consolidate 1 and 2 channel paths
         match buffers.inputs.len() {
@@ -211,15 +211,26 @@ where
                                 // Push our encoded data to the networking thread via ringbuffer
                                 // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
                                 // TODO: Is this a valid strategy?
-                                let _ = self.producer.push(TransmitterNodeNetworkThreadMessage {
-                                    address: self.address.clone(),
-                                    node_net_id: self.node_net_id,
-                                    encoded_data: self.encoding_buffer,
-                                    encoded_len: len,
-                                });
+                                if self
+                                    .producer
+                                    .push(TransmitterNodeNetworkThreadMessage {
+                                        address: self.address.clone(),
+                                        node_net_id: self.node_net_id,
+                                        encoded_data: self.encoding_buffer,
+                                        encoded_len: len,
+                                    })
+                                    .is_err()
+                                {
+                                    let _ = extra.logger.try_error(
+                                        "Transmitter node -> network thread producer is full",
+                                    );
+                                }
                             }
                             Err(e) => {
-                                warn!("Opus Encoding Error: {e}");
+                                let _ = extra.logger.try_error_with(|string| {
+                                    let _ = write!(string, "Opus encoding failed: {}", e);
+                                });
+
                                 self.opus_frame_buffer_len = 0;
                                 return ProcessStatus::ClearAllOutputs;
                             }
@@ -263,7 +274,9 @@ where
                         ) {
                             Ok(len) => len,
                             Err(e) => {
-                                warn!("Opus Encoding Error: {e}");
+                                let _ = extra.logger.try_error_with(|string| {
+                                    let _ = write!(string, "Opus decoding failed: {}", e);
+                                });
                                 self.opus_frame_buffer_len = 0;
                                 return ProcessStatus::ClearAllOutputs;
                             }

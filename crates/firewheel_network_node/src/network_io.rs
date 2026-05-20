@@ -1,4 +1,4 @@
-use crate::constants::TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE;
+use crate::constants::ENCODED_OPUS_BUFFER_SIZE;
 use crate::transport::NetworkNodeTransport;
 use lazy_static::lazy_static;
 use log::{error, warn};
@@ -109,14 +109,11 @@ pub(crate) fn network_thread<T>(
                     return true;
                 }
 
-                let len = min(
-                    sent_message.encoded.len(),
-                    TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE,
-                );
+                let len = min(sent_message.encoded.len(), ENCODED_OPUS_BUFFER_SIZE);
 
                 let message = ReceiverNodeNetworkThreadMessage {
                     encoded_data: {
-                        let mut encoded_data = [0u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE];
+                        let mut encoded_data = [0u8; ENCODED_OPUS_BUFFER_SIZE];
                         encoded_data[0..len].copy_from_slice(&sent_message.encoded);
                         encoded_data
                     },
@@ -127,6 +124,7 @@ pub(crate) fn network_thread<T>(
                     Ok(_) => true,
                     Err(_) => {
                         // Buffer is full
+                        warn!("Network thread -> Receiver node producer is full");
                         true
                     }
                 }
@@ -159,12 +157,12 @@ where
 {
     pub(crate) address: T::Addr,
     pub(crate) node_net_id: u32,
-    pub(crate) encoded_data: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
+    pub(crate) encoded_data: [u8; ENCODED_OPUS_BUFFER_SIZE],
     pub(crate) encoded_len: usize,
 }
 
 pub(crate) struct ReceiverNodeNetworkThreadMessage {
-    pub(crate) encoded_data: [u8; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE],
+    pub(crate) encoded_data: [u8; ENCODED_OPUS_BUFFER_SIZE],
     pub(crate) encoded_len: usize,
 }
 

@@ -1,6 +1,5 @@
 use crate::constants::{
-    NETWORK_MESSAGE_RINGBUFFER_SIZE, RECEIVER_NODE_BUFFER_SIZE,
-    TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE,
+    ENCODED_OPUS_BUFFER_SIZE, NETWORK_MESSAGE_RINGBUFFER_SIZE, RECEIVER_NODE_BUFFER_SIZE,
 };
 use crate::network_io::{
     network_thread, NetworkThreadControlMessage, NetworkThreadRegistryKey,
@@ -15,8 +14,8 @@ use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
-use log::warn;
 use opus2::Decoder;
+use std::fmt::Write;
 use std::marker::PhantomData;
 use std::sync::mpsc;
 
@@ -98,7 +97,7 @@ where
 
         let sender = match network_thread_registry_lock.get::<NetworkThreadRegistryKey<T>>() {
             None => {
-                // TODO: Initialize the transport outside of the construction of the processor, in some method that the user is responsible for calling beforehand. This removes the issue of "the first node to activate the spawning of the thread decies the config and all other nodes have redundant/unused transport config data
+                // TODO: Initialize the transport outside of the construction of the processor, in some method that the user is responsible for calling beforehand. This removes the issue of "the first node to activate the spawning of the thread decides the config and all other nodes have redundant/unused transport config data
                 // Initialize actual transport for this transport type
                 let transport = T::construct(&configuration.transport_config)?;
 
@@ -156,23 +155,18 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
     ) -> ProcessStatus {
         // First, receive anything from network thread
         while let Ok(message) = self.consumer.pop() {
-            let mut buf = [0f32; TRANSMITTER_NODE_OPUS_ENCODING_BUFFER_SIZE];
-            // println!(
-            //     "Decoding (with length {}): {:?}",
-            //     message.encoded_len,
-            //     message.encoded_data[0..message.encoded_len].to_vec()
-            // );
+            let mut buf = [0f32; ENCODED_OPUS_BUFFER_SIZE];
             let len = match self.decoder.decode_float(
                 &message.encoded_data[0..message.encoded_len],
                 &mut buf,
                 false,
             ) {
-                Ok(len) => {
-                    // println!("Decoded float buffer length: {}", len);
-                    len
-                }
+                Ok(len) => len,
                 Err(e) => {
-                    warn!("Opus decoding failed: {}", e);
+                    let _ = extra.logger.try_error_with(|string| {
+                        let _ = write!(string, "Opus decoding failed: {}", e);
+                    });
+
                     continue;
                 }
             };
