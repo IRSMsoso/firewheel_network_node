@@ -230,7 +230,13 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
                     buffers.outputs[0][index] = left;
                     buffers.outputs[1][index] = right;
                     index += 1;
+
+                    if index == info.frames {
+                        return ProcessStatus::OutputsModified;
+                    }
                 }
+
+                let _ = extra.logger.try_error("RAN OUT OF INTERNAL BUFFER");
             }
             _ => {
                 unreachable!()
