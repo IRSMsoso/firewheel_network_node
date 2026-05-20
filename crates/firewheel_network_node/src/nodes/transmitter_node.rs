@@ -13,6 +13,8 @@ use firewheel_core::node::{
     AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, NodeError,
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
+use fixed_resample::audioadapter_buffers::direct::SequentialSliceOfSlices;
+use fixed_resample::{PushStatus, ResamplingChannelConfig, ResamplingCons, ResamplingProd};
 use opus2::Encoder;
 use std::fmt::Write;
 use std::sync::mpsc;
@@ -124,6 +126,17 @@ where
             .send(NetworkThreadControlMessage::RegisterTransmitter { consumer })
             .expect("Network thread should never stop");
 
+        let (resampling_producer, resampling_consumer) = fixed_resample::resampling_channel(
+            match configuration.channels {
+                OpusChannels::Mono => 1,
+                OpusChannels::Stereo => 2,
+            },
+            cx.stream_info.sample_rate.get(),
+            48000,
+            false,
+            ResamplingChannelConfig::default(),
+        );
+
         Ok(NetworkTransmitterNodeProcessor::<T> {
             encoder: Encoder::new(
                 cx.stream_info.sample_rate.get(),
@@ -140,6 +153,8 @@ where
                 }
             ],
             opus_frame_buffer_len: 0,
+            resampling_producer,
+            resampling_consumer,
             address: self.address.clone(),
             node_net_id: self.node_net_id,
         })
@@ -161,6 +176,11 @@ where
     /// Opus frame buffer index
     opus_frame_buffer_len: usize,
 
+    /// Resampling producer
+    resampling_producer: ResamplingProd<f32>,
+    /// Resampling consumer
+    resampling_consumer: ResamplingCons<f32>,
+
     // Patched
     /// The network address of the node to send audio to
     address: T::Addr,
@@ -174,11 +194,40 @@ where
 {
     fn process(
         &mut self,
-        _info: &ProcInfo,
+        info: &ProcInfo,
         buffers: ProcBuffers,
         extra: &mut ProcExtra,
     ) -> ProcessStatus {
         let num_samples = buffers.inputs[0].len();
+
+        // Push all input to resampler
+        let push_status = self.resampling_producer.push(
+            &SequentialSliceOfSlices::new(buffers.inputs, buffers.inputs.len(), info.frames)
+                .unwrap(),
+            None,
+            None,
+        );
+
+        match push_status {
+            PushStatus::Ok => {}
+            PushStatus::OutputNotReady => {
+                let _ = extra
+                    .logger
+                    .try_error("TRANSMITTER RESAMPLE: OutputNotReady");
+            }
+            PushStatus::OverflowOccurred { .. } => {
+                let _ = extra
+                    .logger
+                    .try_error("TRANSMITTER RESAMPLE: OverflowOccurred");
+            }
+            PushStatus::UnderflowCorrected { .. } => {
+                let _ = extra
+                    .logger
+                    .try_error("TRANSMITTER RESAMPLE: UnderflowCorrected");
+            }
+        }
+
+        self.resampling_consumer.read_interleaved()
 
         for sample_index in 0..num_samples {
             match buffers.inputs.len() {
