@@ -7,4 +7,4 @@
 - [ ] Add examples for steam networking transport
 - [ ] Recover more gracefully when internal buffer is depleted to avoid clicks when not getting enough network input in
   time
-- [ ] Add basic usage section to readme explaing how to use the crate, including all concepts like node net ids
+- [ ] Add basic usage section to readme explaining how to use the crate, including all concepts like node net ids
