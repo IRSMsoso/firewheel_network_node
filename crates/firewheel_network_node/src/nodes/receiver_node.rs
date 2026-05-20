@@ -1,5 +1,5 @@
 use crate::constants::{
-    ENCODED_OPUS_BUFFER_SIZE, NETWORK_MESSAGE_RINGBUFFER_SIZE, RECEIVER_NODE_BUFFER_SIZE,
+    NETWORK_MESSAGE_RINGBUFFER_SIZE, OPUS_FRAME_BUFFER_SIZE, RECEIVER_NODE_BUFFER_SIZE,
 };
 use crate::network_io::{
     network_thread, NetworkThreadControlMessage, NetworkThreadRegistryKey,
@@ -133,6 +133,13 @@ where
             )?,
             consumer,
             buffer: CircularBuffer::new(),
+            opus_frame_buffer: vec![
+                0.0f32;
+                match configuration.channels {
+                    OpusChannels::Mono => OPUS_FRAME_BUFFER_SIZE,
+                    OpusChannels::Stereo => OPUS_FRAME_BUFFER_SIZE * 2,
+                }
+            ],
         })
     }
 }
@@ -144,6 +151,8 @@ struct NetworkReceiverNodeProcessor {
     consumer: rtrb::Consumer<ReceiverNodeNetworkThreadMessage>,
     /// Buffer used to store decoded samples until they're consumed by the receiver node
     buffer: CircularBuffer<RECEIVER_NODE_BUFFER_SIZE, f32>,
+    /// Opus frame buffer - Used as a buffer for decoding opus bytes into
+    opus_frame_buffer: Vec<f32>,
 }
 
 impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
@@ -155,10 +164,9 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
     ) -> ProcessStatus {
         // First, receive anything from network thread
         while let Ok(message) = self.consumer.pop() {
-            let mut buf = [0f32; ENCODED_OPUS_BUFFER_SIZE];
-            let len = match self.decoder.decode_float(
+            let mut len = match self.decoder.decode_float(
                 &message.encoded_data[0..message.encoded_len],
-                &mut buf,
+                &mut self.opus_frame_buffer,
                 false,
             ) {
                 Ok(len) => len,
@@ -177,7 +185,25 @@ impl AudioNodeProcessor for NetworkReceiverNodeProcessor {
                 );
             }
 
-            self.buffer.extend_from_slice(&buf[0..len]);
+            // Decode function returns number of frames per channel, we want to deal with total number of interleaved frames
+            len = match buffers.outputs.len() {
+                1 => len,
+                2 => len * 2,
+                _ => unreachable!(),
+            };
+
+            // I believe this should always hold true at 48000
+            debug_assert_eq!(len, self.opus_frame_buffer.len());
+            // let _ = extra.logger.try_debug_with(|string| {
+            //     let _ = write!(
+            //         string,
+            //         "len: {}, self.opus_frame_buffer.len(): {}",
+            //         len,
+            //         self.opus_frame_buffer.len()
+            //     );
+            // });
+
+            self.buffer.extend_from_slice(&self.opus_frame_buffer);
         }
 
         // Copy decoded internal buffer to output buffer

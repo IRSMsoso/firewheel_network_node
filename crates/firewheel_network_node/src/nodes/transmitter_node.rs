@@ -1,6 +1,5 @@
 use crate::constants::{
-    ENCODED_OPUS_BUFFER_SIZE, NETWORK_MESSAGE_RINGBUFFER_SIZE,
-    TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
+    ENCODED_OPUS_BUFFER_SIZE, NETWORK_MESSAGE_RINGBUFFER_SIZE, OPUS_FRAME_BUFFER_SIZE,
 };
 use crate::network_io::{
     network_thread, NetworkThreadControlMessage, NetworkThreadRegistryKey,
@@ -133,21 +132,11 @@ where
             )?,
             producer,
             encoding_buffer: [0; ENCODED_OPUS_BUFFER_SIZE],
-            interleaving_buffer: match configuration.channels {
-                OpusChannels::Mono => None,
-                OpusChannels::Stereo => {
-                    // Preallocate interleaving space
-                    Some(vec![
-                        0.0;
-                        cx.stream_info.max_block_frames.get() as usize * 2
-                    ])
-                }
-            },
             opus_frame_buffer: vec![
                 0.0f32;
                 match configuration.channels {
-                    OpusChannels::Mono => TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
-                    OpusChannels::Stereo => TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2,
+                    OpusChannels::Mono => OPUS_FRAME_BUFFER_SIZE,
+                    OpusChannels::Stereo => OPUS_FRAME_BUFFER_SIZE * 2,
                 }
             ],
             opus_frame_buffer_len: 0,
@@ -167,8 +156,6 @@ where
     producer: rtrb::Producer<TransmitterNodeNetworkThreadMessage<T>>,
     /// Encoding buffer - The buffer that opus frames are encoded into
     encoding_buffer: [u8; ENCODED_OPUS_BUFFER_SIZE],
-    /// Interleaving buffer - Used to interleave two channels into one for the opus encoder to process
-    interleaving_buffer: Option<Vec<f32>>,
     /// Opus frame buffer - buffers input into the transmitter node until it hits a certain frame size compatible with the opus codec
     opus_frame_buffer: Vec<f32>,
     /// Opus frame buffer index
@@ -191,105 +178,67 @@ where
         buffers: ProcBuffers,
         extra: &mut ProcExtra,
     ) -> ProcessStatus {
-        // TODO: Simplify and consolidate 1 and 2 channel paths
-        match buffers.inputs.len() {
-            1 => {
-                let num_samples = buffers.inputs[0].len();
+        let num_samples = buffers.inputs[0].len();
 
-                for sample_index in 0..num_samples {
+        for sample_index in 0..num_samples {
+            match buffers.inputs.len() {
+                1 => {
+                    // In the mono case, we simply copy from the processor input buffer and increment the buffer len
                     self.opus_frame_buffer[self.opus_frame_buffer_len] =
                         buffers.inputs[0][sample_index];
 
                     self.opus_frame_buffer_len += 1;
-
-                    if self.opus_frame_buffer_len == TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE {
-                        match self.encoder.encode_float(
-                            &self.opus_frame_buffer[0..TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE],
-                            &mut self.encoding_buffer,
-                        ) {
-                            Ok(len) => {
-                                // Push our encoded data to the networking thread via ringbuffer
-                                // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
-                                // TODO: Is this a valid strategy?
-                                if self
-                                    .producer
-                                    .push(TransmitterNodeNetworkThreadMessage {
-                                        address: self.address.clone(),
-                                        node_net_id: self.node_net_id,
-                                        encoded_data: self.encoding_buffer,
-                                        encoded_len: len,
-                                    })
-                                    .is_err()
-                                {
-                                    let _ = extra.logger.try_error(
-                                        "Transmitter node -> network thread producer is full",
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                let _ = extra.logger.try_error_with(|string| {
-                                    let _ = write!(string, "Opus encoding failed: {}", e);
-                                });
-
-                                self.opus_frame_buffer_len = 0;
-                                return ProcessStatus::ClearAllOutputs;
-                            }
-                        };
-
-                        self.opus_frame_buffer_len = 0;
-                    }
                 }
-            }
-            2 => {
-                let interleaving_buffer = self.interleaving_buffer.as_mut().expect(
-                    "If two channels are presence, should have allocated interleaving buffer",
-                );
-
-                // For stereo, we must interleave the channels for opus.
-                let num_samples = buffers.inputs[0].len();
-
-                debug_assert!(interleaving_buffer.len() >= num_samples * 2);
-
-                // Assumption: buffers.inputs[0].len() == buffers.inputs[1].len()
-                debug_assert_eq!(buffers.inputs[0].len(), buffers.inputs[1].len());
-
-                for sample_index in 0..buffers.inputs[0].len() {
-                    interleaving_buffer[sample_index * 2] = buffers.inputs[0][sample_index];
-                    interleaving_buffer[sample_index * 2 + 1] = buffers.inputs[1][sample_index];
-                }
-
-                let mut len = 0;
-
-                for sample_index in 0..(num_samples * 2) {
+                2 => {
+                    // In the stereo case, we interleave the two input buffers for the opus encoder
                     self.opus_frame_buffer[self.opus_frame_buffer_len] =
-                        interleaving_buffer[sample_index];
+                        buffers.inputs[0][sample_index];
+                    self.opus_frame_buffer[self.opus_frame_buffer_len + 1] =
+                        buffers.inputs[1][sample_index];
 
-                    self.opus_frame_buffer_len += 1;
+                    self.opus_frame_buffer_len += 2;
+                }
+                _ => unreachable!(),
+            }
 
-                    if self.opus_frame_buffer_len == (TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE * 2) {
-                        // TODO: Break this into multiple messages to save headers
-                        len += match self.encoder.encode_float(
-                            &self.opus_frame_buffer[0..TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE],
-                            &mut self.encoding_buffer[len..],
-                        ) {
-                            Ok(len) => len,
-                            Err(e) => {
-                                let _ = extra.logger.try_error_with(|string| {
-                                    let _ = write!(string, "Opus decoding failed: {}", e);
-                                });
-                                self.opus_frame_buffer_len = 0;
-                                return ProcessStatus::ClearAllOutputs;
-                            }
-                        };
+            // If we've reached our max capacity
+            if self.opus_frame_buffer_len == self.opus_frame_buffer.len() {
+                match self
+                    .encoder
+                    .encode_float(&self.opus_frame_buffer, &mut self.encoding_buffer)
+                {
+                    Ok(len) => {
+                        // Push our encoded data to the networking thread via ringbuffer
+                        // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
+                        // TODO: Is this a valid strategy?
+                        if self
+                            .producer
+                            .push(TransmitterNodeNetworkThreadMessage {
+                                address: self.address.clone(),
+                                node_net_id: self.node_net_id,
+                                encoded_data: self.encoding_buffer,
+                                encoded_len: len,
+                            })
+                            .is_err()
+                        {
+                            let _ = extra
+                                .logger
+                                .try_error("Transmitter node -> network thread producer is full");
+                        }
+                    }
+                    Err(e) => {
+                        let _ = extra.logger.try_error_with(|string| {
+                            let _ = write!(string, "Opus encoding failed: {}", e);
+                        });
 
                         self.opus_frame_buffer_len = 0;
+                        return ProcessStatus::ClearAllOutputs;
                     }
-                }
+                };
+
+                self.opus_frame_buffer_len = 0;
             }
-            _ => {
-                unreachable!()
-            }
-        };
+        }
 
         ProcessStatus::ClearAllOutputs
     }
