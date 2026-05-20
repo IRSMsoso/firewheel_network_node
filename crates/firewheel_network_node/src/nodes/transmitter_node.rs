@@ -14,6 +14,7 @@ use firewheel_core::node::{
     ProcBuffers, ProcExtra, ProcInfo, ProcessStatus,
 };
 use opus2::Encoder;
+use rubato::{Fft, FixedSync, Resampler};
 use std::fmt::Write;
 use std::sync::mpsc;
 
@@ -124,6 +125,21 @@ where
             .send(NetworkThreadControlMessage::RegisterTransmitter { consumer })
             .expect("Network thread should never stop");
 
+        let fft = match cx.stream_info.sample_rate.get() {
+            48000 => None,
+            sample_rate => Some(Fft::new(
+                cx.stream_info.sample_rate.get() as usize,
+                48000,
+                256,
+                1,
+                match configuration.channels {
+                    OpusChannels::Mono => 1,
+                    OpusChannels::Stereo => 2,
+                },
+                FixedSync::Both,
+            )?),
+        };
+
         Ok(NetworkTransmitterNodeProcessor::<T> {
             encoder: Encoder::new(
                 cx.stream_info.sample_rate.get(),
@@ -140,10 +156,24 @@ where
                 }
             ],
             opus_frame_buffer_len: 0,
+            resampler: fft.map(|fft| FftResampler {
+                resampler_input: vec![0.0f32; fft.input_frames_max()],
+                resampler_output: vec![0.0f32; fft.output_frames_max()],
+                fft,
+            }),
             address: self.address.clone(),
             node_net_id: self.node_net_id,
         })
     }
+}
+
+struct FftResampler {
+    /// Rubato resampler used to coerce the sample rate of the firewheel graph to a sample rate that opus supports
+    fft: Fft<f32>,
+    /// The pre-allocated input buffer for the resampler
+    resampler_input: Vec<f32>,
+    /// The pre-allocated output buffer for the resampler
+    resampler_output: Vec<f32>,
 }
 
 struct NetworkTransmitterNodeProcessor<T>
@@ -160,6 +190,9 @@ where
     opus_frame_buffer: Vec<f32>,
     /// Opus frame buffer index
     opus_frame_buffer_len: usize,
+
+    /// Resampling info, including the actual resampler, the input buffer, and the output buffer
+    resampler: Option<FftResampler>,
 
     // Patched
     /// The network address of the node to send audio to
@@ -184,10 +217,17 @@ where
             match buffers.inputs.len() {
                 1 => {
                     // In the mono case, we simply copy from the processor input buffer and increment the buffer len
-                    self.opus_frame_buffer[self.opus_frame_buffer_len] =
-                        buffers.inputs[0][sample_index];
+                    match &mut self.resampler {
+                        Some(fft_resampler) => {
+                            fft_resampler.fft.process_into_buffer();
+                        }
+                        None => {
+                            self.opus_frame_buffer[self.opus_frame_buffer_len] =
+                                buffers.inputs[0][sample_index];
 
-                    self.opus_frame_buffer_len += 1;
+                            self.opus_frame_buffer_len += 1;
+                        }
+                    }
                 }
                 2 => {
                     // In the stereo case, we interleave the two input buffers for the opus encoder
