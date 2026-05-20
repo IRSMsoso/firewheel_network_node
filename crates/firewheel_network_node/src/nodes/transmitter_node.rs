@@ -208,22 +208,6 @@ where
                             &mut self.encoding_buffer,
                         ) {
                             Ok(len) => {
-                                // println!(
-                                //     "Encoded float buffer length: {}",
-                                //     TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE
-                                // );
-                                // println!(
-                                //     "Floats (with len {}): {:?}",
-                                //     TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE,
-                                //     self.opus_frame_buffer
-                                //         [0..TRANSMITTER_NODE_OPUS_FRAME_BUFFER_SIZE]
-                                //         .to_vec()
-                                // );
-                                // println!(
-                                //     "Successfully encoded to (with len {}): {:?}",
-                                //     len,
-                                //     self.encoding_buffer[0..len].to_vec()
-                                // );
                                 // Push our encoded data to the networking thread via ringbuffer
                                 // If the ringbuffer is full, we do nothing and allow network thread to catchup at the cost of losing some audio
                                 // TODO: Is this a valid strategy?
@@ -256,7 +240,7 @@ where
                 debug_assert!(interleaving_buffer.len() >= num_samples * 2);
 
                 // Assumption: buffers.inputs[0].len() == buffers.inputs[1].len()
-                assert_eq!(buffers.inputs[0].len(), buffers.inputs[1].len());
+                debug_assert_eq!(buffers.inputs[0].len(), buffers.inputs[1].len());
 
                 for sample_index in 0..buffers.inputs[0].len() {
                     interleaving_buffer[sample_index * 2] = buffers.inputs[0][sample_index];
