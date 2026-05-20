@@ -22,7 +22,7 @@ fn main() {
 
 // fn play_sound(mut commands: Commands, server: Res<AssetServer>) {
 //     commands.spawn((
-//         SamplePlayer::new(server.load("music/arcadia48000.mp3")).looping(),
+//         SamplePlayer::new(server.load("music/arcadia.mp3")).looping(),
 //         sample_effects![FreeverbNode::default()],
 //     ));
 // }

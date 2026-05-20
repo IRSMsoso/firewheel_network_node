@@ -1,3 +1,4 @@
+use clap::{Parser, ValueEnum};
 use firewheel::cpal::CpalStream;
 use firewheel::nodes::sampler::{SamplerNode, SamplerState};
 use firewheel::FirewheelContext;
@@ -17,7 +18,35 @@ use std::time::Duration;
 
 const UPDATE_INTERVAL: Duration = Duration::from_millis(15);
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// The sound file to use as input to the transmitter node
+    #[arg(short, long)]
+    sound: Option<SoundFile>,
+    /// The number of inputs to pass to the transmitter node and outputs to take from the receiver node
+    #[arg(short, long)]
+    num_channels: Option<u32>,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+enum SoundFile {
+    Arcadia,
+    LRTest,
+}
+
+impl SoundFile {
+    fn get_path(&self) -> &str {
+        match self {
+            SoundFile::Arcadia => "assets/arcadia.mp3",
+            SoundFile::LRTest => "assets/l_r_test.wav",
+        }
+    }
+}
+
 fn main() {
+    let cli = Cli::parse();
+
     simple_logger::SimpleLogger::new().env().init().unwrap();
 
     // --- Start the context and get the sample rate of the audio stream. ----------------
@@ -42,7 +71,14 @@ fn main() {
         .add_node(
             transmitter_node,
             Some(NetworkTransmitterNodeConfig {
-                channels: OpusChannels::Mono,
+                channels: match cli.num_channels.unwrap_or(1) {
+                    1 => OpusChannels::Mono,
+                    2 => OpusChannels::Stereo,
+                    _ => {
+                        eprintln!("num_channels must be 1 or 2");
+                        return;
+                    }
+                },
                 opus_application_type: OpusApplicationType::Audio,
                 transport_config: UdpSocketTransportConfig { port: 1680 },
             }),
@@ -52,7 +88,7 @@ fn main() {
     // --- Load a sample into memory, and tell the node to use it and play it. -----------
 
     let probed = symphonium::probe_from_file(
-        "assets/arcadia48000.mp3",
+        cli.sound.unwrap_or(SoundFile::Arcadia).get_path(),
         None, // Custom container probe
     )
     .unwrap();
@@ -84,7 +120,14 @@ fn main() {
         .add_node(
             receiver_node,
             Some(NetworkReceiverNodeConfig {
-                channels: OpusChannels::Mono,
+                channels: match cli.num_channels.unwrap_or(1) {
+                    1 => OpusChannels::Mono,
+                    2 => OpusChannels::Stereo,
+                    _ => {
+                        eprintln!("num_channels must be 1 or 2");
+                        return;
+                    }
+                },
                 transport_config: UdpSocketTransportConfig { port: 1680 },
             }),
         )
@@ -93,12 +136,44 @@ fn main() {
     let graph_out_id = cx.graph_out_node_id();
 
     // Connect sampler to transmitter
-    cx.connect(sampler_id, transmitter_id, &[(0, 0), (1, 0)], false)
-        .unwrap();
+    cx.connect(
+        sampler_id,
+        transmitter_id,
+        &[
+            (0, 0),
+            (
+                1,
+                // Route the second channel of the sampler to either the first channel if there's only one channel, or the second transmitter channel if it has two
+                match cli.num_channels.unwrap_or(1) {
+                    1 => 0,
+                    2 => 1,
+                    _ => unreachable!(),
+                },
+            ),
+        ],
+        false,
+    )
+    .unwrap();
 
     // Connect receiver to output
-    cx.connect(receiver_id, graph_out_id, &[(0, 0), (0, 1)], true)
-        .unwrap();
+    cx.connect(
+        receiver_id,
+        graph_out_id,
+        &[
+            (0, 0),
+            (
+                // Same here in reverse
+                match cli.num_channels.unwrap_or(1) {
+                    1 => 0,
+                    2 => 1,
+                    _ => unreachable!(),
+                },
+                1,
+            ),
+        ],
+        true,
+    )
+    .unwrap();
 
     // --- Simulated update loop ---------------------------------------------------------
     loop {
